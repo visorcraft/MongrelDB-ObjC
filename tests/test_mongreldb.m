@@ -26,9 +26,8 @@ static int g_skip = 0;
 
 #define FAIL(...)                                                              \
     do {                                                                       \
-        printf("  FAIL %s:%d: ", __FILE__, __LINE__);                          \
-        printf(__VA_ARGS__);                                                   \
-        printf("\n");                                                          \
+        printf("  FAIL %s:%d: %s\n", __FILE__, __LINE__,                       \
+               [[NSString stringWithFormat:__VA_ARGS__] UTF8String]);          \
         g_fail++;                                                              \
     } while (0)
 
