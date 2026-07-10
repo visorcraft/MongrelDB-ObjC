@@ -20,8 +20,12 @@ NS_ASSUME_NONNULL_BEGIN
 /* Error domain for all MongrelDBClient failures. */
 FOUNDATION_EXPORT NSErrorDomain const MongrelDBErrorDomain;
 
-/* Error codes. Mirrors the categorization of the other MongrelDB clients. */
-typedef NS_ERROR_ENUM(NSInteger, MongrelDBErrorCode) {
+/* Error codes. Mirrors the categorization of the other MongrelDB clients.
+ * Uses NS_ENUM (rather than NS_ERROR_ENUM) because the codes are plain
+ * integers applied to NSError via the separate MongrelDBErrorDomain constant;
+ * NS_ERROR_ENUM's first argument must name a global error-domain constant,
+ * which does not fit this layout. */
+typedef NS_ENUM(NSInteger, MongrelDBErrorCode) {
     MongrelDBErrorAuth           = -1,  /* HTTP 401 or 403 */
     MongrelDBErrorNotFound       = -2,  /* HTTP 404 */
     MongrelDBErrorConflict       = -3,  /* HTTP 409 (unique/fk/check violation) */
