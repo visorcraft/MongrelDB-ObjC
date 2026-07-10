@@ -74,6 +74,9 @@ const int64_t MongrelDBMaxResponseBytes = 268435456LL; /* 256 MB */
 @property (nonatomic, strong) NSURLSession *session;
 @property (nonatomic, strong) NSLock *errorLock;
 @property (nonatomic, copy) NSString *lastErrorStr;
+/* Expand the flat `cells` array in one /kit/query row into a column-id-keyed
+ * dictionary. */
+- (NSDictionary *)decodeQueryRow:(id)raw;
 @end
 
 @implementation MongrelDBClient
@@ -510,7 +513,53 @@ const int64_t MongrelDBMaxResponseBytes = 268435456LL; /* 256 MB */
         *truncated = [t boolValue];
     }
     id rows = [resp objectForKey:@"rows"];
-    return [rows isKindOfClass:[NSArray class]] ? (NSArray<NSDictionary *> *)rows : @[];
+    if (![rows isKindOfClass:[NSArray class]]) {
+        return @[];
+    }
+    /* The daemon returns each row as
+     *   {"row_id":"0","cells":[col_id, value, col_id, value, ...]}
+     * with a flat cells array. Decode each row into a column-id-keyed
+     * dictionary (keys are NSNumber column ids) so callers can do
+     * [row objectForKey:@(columnId)]. */
+    NSMutableArray *decoded = [NSMutableArray arrayWithCapacity:[(NSArray *)rows count]];
+    for (id raw in (NSArray *)rows) {
+        NSDictionary *decodedRow = [self decodeQueryRow:raw];
+        [decoded addObject:decodedRow];
+    }
+    return decoded;
+}
+
+/* Decode one /kit/query row: expand the flat `cells` array into a
+ * column-id-keyed dictionary. Falls back to the raw object when the shape
+ * is unexpected so callers still get something usable. */
+- (NSDictionary *)decodeQueryRow:(id)raw {
+    if (![raw isKindOfClass:[NSDictionary class]]) {
+        return raw ?: @{};
+    }
+    NSDictionary *row = (NSDictionary *)raw;
+    id cells = [row objectForKey:@"cells"];
+    if (![cells isKindOfClass:[NSArray class]]) {
+        return row;
+    }
+    NSArray *flat = (NSArray *)cells;
+    NSMutableDictionary *out = [NSMutableDictionary dictionary];
+    /* Preserve row_id so callers that need the engine-assigned id can read it. */
+    id rowId = [row objectForKey:@"row_id"];
+    if (rowId) {
+        out[@"row_id"] = rowId;
+    }
+    /* Flat array: even indices are column ids (NSNumber), odd indices values. */
+    NSUInteger n = flat.count;
+    NSUInteger i = 0;
+    while (i + 1 < n) {
+        id colId = flat[i];
+        id val = flat[i + 1];
+        if (colId) {
+            out[colId] = val ?: NSNull.null;
+        }
+        i += 2;
+    }
+    return out;
 }
 
 /* ── SQL & schema ──────────────────────────────────────────────────────── */
