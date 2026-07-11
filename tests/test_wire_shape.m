@@ -149,6 +149,8 @@ static void test_crlf_rejection(void) {
 }
 
 int main(int argc, const char *argv[]) {
+    (void)argc;
+    (void)argv;
     @autoreleasepool {
         RUN(test_create_table_body);
         RUN(test_txn_body_with_key);

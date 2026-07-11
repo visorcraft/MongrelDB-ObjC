@@ -424,6 +424,8 @@ static void test_idempotency_key(void) {
 /* ── Main ──────────────────────────────────────────────────────────────── */
 
 int main(int argc, const char *argv[]) {
+    (void)argc;
+    (void)argv;
     @autoreleasepool {
         setupDaemon();
 
