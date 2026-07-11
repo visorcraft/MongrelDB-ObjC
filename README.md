@@ -4,6 +4,8 @@
 
 <h1 align="center">MongrelDB Objective-C Client</h1>
 
+History retention: `setHistoryRetentionEpochs:error:`, `historyRetentionEpochs:`, and `earliestRetainedEpoch:`.
+
 <p align="center">
   <b>Objective-C (Apple Foundation) HTTP client for MongrelDB - embedded+server database with SQL, vector search, full-text search, and AI-native retrieval.</b>
   <br />

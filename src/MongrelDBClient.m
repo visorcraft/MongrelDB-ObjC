@@ -332,6 +332,24 @@ const int64_t MongrelDBMaxResponseBytes = 268435456LL; /* 256 MB */
     return @[];
 }
 
+- (nullable NSDictionary<NSString *, NSNumber *> *)setHistoryRetentionEpochs:(uint64_t)epochs error:(NSError *_Nullable *_Nullable)error {
+    id r = [self requestMethod:@"PUT" path:@"history/retention" body:@{@"history_retention_epochs": @(epochs)} error:error];
+    return [r isKindOfClass:[NSDictionary class]] ? r : nil;
+}
+
+- (nullable NSDictionary<NSString *, NSNumber *> *)historyRetention:(NSError *_Nullable *_Nullable)error {
+    id r = [self requestMethod:@"GET" path:@"history/retention" body:nil error:error];
+    return [r isKindOfClass:[NSDictionary class]] ? r : nil;
+}
+
+- (uint64_t)historyRetentionEpochs:(NSError *_Nullable *_Nullable)error {
+    return [self historyRetention:error][@"history_retention_epochs"].unsignedLongLongValue;
+}
+
+- (uint64_t)earliestRetainedEpoch:(NSError *_Nullable *_Nullable)error {
+    return [self historyRetention:error][@"earliest_retained_epoch"].unsignedLongLongValue;
+}
+
 - (int64_t)createTableWithName:(NSString *)name
                        columns:(NSArray<MongrelDBColumn *> *)columns
                          error:(NSError *_Nullable *_Nullable)error {

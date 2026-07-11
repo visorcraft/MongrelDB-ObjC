@@ -137,6 +137,11 @@ typedef NS_ENUM(NSInteger, MongrelDBConditionKind) {
 /* GET /tables. Returns the list of table names. */
 - (nullable NSArray<NSString *> *)tableNames:(NSError *_Nullable *_Nullable)error;
 
+- (nullable NSDictionary<NSString *, NSNumber *> *)setHistoryRetentionEpochs:(uint64_t)epochs error:(NSError *_Nullable *_Nullable)error;
+- (nullable NSDictionary<NSString *, NSNumber *> *)historyRetention:(NSError *_Nullable *_Nullable)error;
+- (uint64_t)historyRetentionEpochs:(NSError *_Nullable *_Nullable)error;
+- (uint64_t)earliestRetainedEpoch:(NSError *_Nullable *_Nullable)error;
+
 /* POST /kit/create_table. Returns the assigned table id (0 if none reported). */
 - (int64_t)createTableWithName:(NSString *)name
                        columns:(NSArray<MongrelDBColumn *> *)columns
