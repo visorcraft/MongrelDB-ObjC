@@ -88,7 +88,7 @@ int main(int argc, const char *argv[]) {
                                                 primaryKey:NO nullable:NO];
         MongrelDBColumn *c3 = [[MongrelDBColumn alloc] init];
         c3.columnId = 3; c3.name = @"score"; c3.type = @"float64";
-        c3.primaryKey = NO; c3.nullable = NO; c3.defaultValue = @0.0;
+        c3.primaryKey = NO; c3.nullable = NO; c3.defaultValueJSON = @0.0;
         MongrelDBColumn *c4 = [[MongrelDBColumn alloc] init];
         c4.columnId = 4; c4.name = @"status"; c4.type = @"varchar";
         c4.primaryKey = NO; c4.nullable = NO;
