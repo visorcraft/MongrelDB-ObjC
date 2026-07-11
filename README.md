@@ -4,8 +4,6 @@
 
 <h1 align="center">MongrelDB Objective-C Client</h1>
 
-History retention: `setHistoryRetentionEpochs:error:`, `historyRetentionEpochs:`, and `earliestRetainedEpoch:`.
-
 <p align="center">
   <b>Objective-C (Apple Foundation) HTTP client for MongrelDB - embedded+server database with SQL, vector search, full-text search, and AI-native retrieval.</b>
   <br />
@@ -36,7 +34,7 @@ History retention: `setHistoryRetentionEpochs:error:`, `historyRetentionEpochs:`
 - **Typed CRUD** over the Kit transaction endpoint: `putIntoTable:cells:`, `upsertIntoTable:cells:updateCells:` (insert-or-update on PK conflict), `deleteFromTable:rowId:` and `deleteFromTable:primaryKeyValue:`, with idempotency keys for safe retries.
 - **Query builder** that pushes conditions down to the engine's specialized indexes for sub-millisecond lookups: bitmap equality, learned-range, null checks, and FM-index full-text search. Conditions are AND-ed.
 - **Idempotent batch transactions** - all operations staged locally and committed atomically, with the engine enforcing unique, foreign key, and check constraints at commit time. Idempotency keys return the original response on duplicate commits, even after a crash.
-- **Full SQL access** through the DataFusion-backed `/sql` endpoint: recursive CTEs, window functions, `CREATE TABLE AS SELECT`, materialized views, and multi-statement execution.
+- **Full SQL access** through the DataFusion-backed `/sql` endpoint: recursive CTEs, window functions, `CREATE TABLE AS SELECT`, and multi-statement execution.
 - **Schema management**: typed table creation, full schema catalog, and per-table descriptors.
 - **Typed error codes**: `MongrelDBErrorAuth` (401/403), `MongrelDBErrorNotFound` (404), `MongrelDBErrorConflict` (409), `MongrelDBErrorQuery` (400/5xx), plus `MongrelDBErrorNetwork` and `MongrelDBErrorJSON`. Retrieve the detail from the NSError's `localizedDescription`.
 - **ARC-friendly**: result arrays are plain NSArray objects the caller owns; no manual retain/release beyond the client itself.
@@ -65,9 +63,9 @@ int main(void) {
 
         /* Create a table. */
         NSArray *cols = @[
-            [MongrelDBColumn columnWithId:1 name:@"id" type:@"int64" primaryKey:YES nullable:NO],
-            [MongrelDBColumn columnWithId:2 name:@"customer" type:@"varchar" primaryKey:NO nullable:NO],
-            [MongrelDBColumn columnWithId:3 name:@"amount" type:@"float64" primaryKey:NO nullable:NO],
+            [MongrelDBColumn columnWithId:1 name:@"id" type:@"int64" primaryKey:YES isNullable:NO],
+            [MongrelDBColumn columnWithId:2 name:@"customer" type:@"varchar" primaryKey:NO isNullable:NO],
+            [MongrelDBColumn columnWithId:3 name:@"amount" type:@"float64" primaryKey:NO isNullable:NO],
         ];
         [db createTableWithName:@"orders" columns:cols error:&e];
 
@@ -78,11 +76,12 @@ int main(void) {
             [MongrelDBInputCell cellWithColumnId:3 value:@99.50],
         ] idempotencyKey:nil error:&e];
 
-        /* Query with a native index condition (learned-range index). */
+        /* Query with a native index condition (learned-range index on an integer column). */
         MongrelDBCondition *cond = [[MongrelDBCondition alloc] init];
         cond.kind = MongrelDBConditionRange;
-        cond.columnId = 3;
-        cond.lo = 100.0; cond.loSet = YES;
+        cond.columnId = 1;
+        cond.lo = 1; cond.loSet = YES;
+        cond.hi = 100; cond.hiSet = YES;
         NSArray *rows = [db queryTable:@"orders" conditions:@[cond]
                             projection:nil limit:100 truncated:nil error:&e];
         NSLog(@"rows: %lu", (unsigned long)rows.count);
@@ -144,15 +143,22 @@ bitmap.kind = MongrelDBConditionBitmapEq;
 bitmap.columnId = 2;
 bitmap.value = @"Alice";
 
-/* Range query (learned-range index) */
+/* Range query on an integer column (learned-range index) */
 MongrelDBCondition *range = [[MongrelDBCondition alloc] init];
 range.kind = MongrelDBConditionRange;
-range.columnId = 3;
-range.lo = 50.0; range.loSet = YES;
-range.hi = 150.0; range.hiSet = YES;
+range.columnId = 1;
+range.lo = 1; range.loSet = YES;
+range.hi = 100; range.hiSet = YES;
+
+/* Range query on a float64 column */
+MongrelDBCondition *rangeF64 = [[MongrelDBCondition alloc] init];
+rangeF64.kind = MongrelDBConditionRangeF64;
+rangeF64.columnId = 3;
+rangeF64.loF64 = 10.5; rangeF64.loSet = YES; rangeF64.loInclusive = YES;
+rangeF64.hiF64 = 99.99; rangeF64.hiSet = YES; rangeF64.hiInclusive = NO;
 
 BOOL trunc = NO;
-NSArray *rows = [db queryTable:@"orders" conditions:@[bitmap, range]
+NSArray *rows = [db queryTable:@"orders" conditions:@[bitmap, range, rangeF64]
                     projection:@[@1, @3] limit:100 truncated:&trunc error:&e];
 if (trunc) {
     /* result set hit the limit; more matches exist on the server */
@@ -171,14 +177,13 @@ statusCol.columnId = 3;
 statusCol.name = @"status";
 statusCol.type = @"enum";
 statusCol.primaryKey = NO;
-statusCol.nullable = NO;
+statusCol.isNullable = NO;
 /* Wire emit: "enum_variants": ["active","inactive","paused"] */
 statusCol.enumVariants = @[@"active", @"inactive", @"paused"];
-statusCol.defaultValueJSON = @3;       /* static JSON scalar */
-statusCol.defaultExpression = @"uuid"; /* dynamic, highest precedence */
+statusCol.defaultValueJSON = @"active"; /* must be one of the enum variants */
 MongrelDBColumn *createdAt = [MongrelDBColumn columnWithId:4
-    name:@"created_at" type:@"timestamp_nanos" primaryKey:NO nullable:NO];
-createdAt.defaultValue = @"now";
+    name:@"created_at" type:@"timestamp_nanos" primaryKey:NO isNullable:NO];
+createdAt.defaultExpression = @"now";
 
 NSDictionary *constraints = @{
     @"checks": @[@{@"id": @1, @"name": @"id_present",
@@ -205,6 +210,9 @@ as `MongrelDBErrorConflict` on `putIntoTable:` / `transactionWithOps:`.
 [db sql:@"SELECT id, ROW_NUMBER() OVER (PARTITION BY customer ORDER BY amount DESC) "
         "FROM orders" error:&e];
 ```
+
+DDL and DML statements return an empty JSON array (`@[]`) on success; `SELECT`
+returns an array of row objects.
 
 ## Error handling
 
@@ -254,6 +262,7 @@ if (e) {
 | `health:` | Check daemon health |
 | `tableNames:` | List table names |
 | `createTableWithName:columns:error:` | Create a table |
+| `createTableWithName:columns:constraints:error:` | Create a table with check constraints |
 | `dropTableWithName:error:` | Drop a table |
 | `countOfTable:error:` | Row count |
 | `putIntoTable:cells:idempotencyKey:error:` | Insert a row |
@@ -265,6 +274,30 @@ if (e) {
 | `sql:error:` | Execute SQL |
 | `schema:error:` | Full schema catalog |
 | `schemaForTable:error:` | Single-table descriptor |
+| `setHistoryRetentionEpochs:error:` | Set the history retention window |
+| `historyRetentionEpochs:` | Get the current retention window |
+| `earliestRetainedEpoch:` | Get the oldest readable epoch |
+
+## History retention
+
+Control how far back time-travel queries can read. The window is measured in
+epochs (monotonically increasing commit numbers).
+
+```objc
+NSError *e = nil;
+NSDictionary *result = [db setHistoryRetentionEpochs:1000 error:&e];
+NSLog(@"window: %llu", [result[@"history_retention_epochs"] unsignedLongLongValue]);
+NSLog(@"earliest: %llu", [result[@"earliest_retained_epoch"] unsignedLongLongValue]);
+
+NSLog(@"window: %llu", [db historyRetentionEpochs:&e]);
+NSLog(@"earliest: %llu", [db earliestRetainedEpoch:&e]);
+
+NSArray *rows = [db sql:@"SELECT customer FROM orders AS OF EPOCH 42 WHERE id = 1" error:&e];
+```
+
+Raising retention prevents history from being garbage collected, but it cannot
+restore epochs that have already been pruned. These endpoints require admin
+privileges when the daemon runs with auth enabled.
 
 ## Building and testing
 
@@ -281,8 +314,9 @@ Fetch a prebuilt server binary from the [MongrelDB releases](https://github.com/
 
 ```sh
 mkdir -p bin
+# For Apple Silicon use mongreldb-server-darwin-arm64; for Intel use mongreldb-server-darwin-x64.
 curl -fsSL -o bin/mongreldb-server \
-  https://github.com/visorcraft/MongrelDB/releases/download/v0.48.0/mongreldb-server-macos-x64
+  https://github.com/visorcraft/MongrelDB/releases/download/v0.48.0/mongreldb-server-darwin-arm64
 chmod +x bin/mongreldb-server
 ```
 

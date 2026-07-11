@@ -79,19 +79,19 @@ int main(int argc, const char *argv[]) {
          *   col 1 = id (int64, primary key)
          *   col 2 = name (varchar)
          *   col 3 = score (float64, default 0.0)
-         *   col 4 = status (varchar, enum ["active","inactive","paused"], default "active")
+         *   col 4 = status (enum ["active","inactive","paused"], default "active")
          */
         NSArray *statusVariants = @[@"active", @"inactive", @"paused"];
         MongrelDBColumn *c1 = [MongrelDBColumn columnWithId:1 name:@"id" type:@"int64"
-                                                primaryKey:YES nullable:NO];
+                                                primaryKey:YES isNullable:NO];
         MongrelDBColumn *c2 = [MongrelDBColumn columnWithId:2 name:@"name" type:@"varchar"
-                                                primaryKey:NO nullable:NO];
+                                                primaryKey:NO isNullable:NO];
         MongrelDBColumn *c3 = [[MongrelDBColumn alloc] init];
         c3.columnId = 3; c3.name = @"score"; c3.type = @"float64";
-        c3.primaryKey = NO; c3.nullable = NO; c3.defaultValueJSON = @0.0;
+        c3.primaryKey = NO; c3.isNullable = NO; c3.defaultValueJSON = @0.0;
         MongrelDBColumn *c4 = [[MongrelDBColumn alloc] init];
-        c4.columnId = 4; c4.name = @"status"; c4.type = @"varchar";
-        c4.primaryKey = NO; c4.nullable = NO;
+        c4.columnId = 4; c4.name = @"status"; c4.type = @"enum";
+        c4.primaryKey = NO; c4.isNullable = NO;
         c4.enumVariants = statusVariants; c4.defaultValue = @"active";
 
         /* 1. Health check. */
@@ -112,7 +112,6 @@ int main(int argc, const char *argv[]) {
         printf("Created table %s (id %lld)\n", table.UTF8String, (long long)tid);
 
         /* 3. Insert three rows. */
-        NSArray *row(NSArray *cells); /* forward */
         mkRow = @[
             [MongrelDBInputCell cellWithColumnId:1 value:@(1)],
             [MongrelDBInputCell cellWithColumnId:2 value:@"Alice"],
@@ -131,7 +130,7 @@ int main(int argc, const char *argv[]) {
             [MongrelDBInputCell cellWithColumnId:3 value:@(78.3)],
             [MongrelDBInputCell cellWithColumnId:4 value:@"paused"],
         ];
-        (void)mkRow; (void)row;
+        (void)mkRow;
         [db putIntoTable:table cells:mkRow idempotencyKey:nil error:&e];
         if (e) { fprintf(stderr, "put failed: %s\n", e.localizedDescription.UTF8String); goto cleanup; }
         [db putIntoTable:table cells:mkRow2 idempotencyKey:nil error:&e];

@@ -17,16 +17,13 @@ native query builder.
 ## How `sql:error:` behaves
 
 `sql:error:` sends `{"sql": "...", "format": "json"}` to `/sql`. It returns the
-decoded JSON body on a 2xx response (rows for SELECT, or the status object for
-DDL/DML), or nil plus an NSError on failure.
+decoded JSON body on a 2xx response, or nil plus an NSError on failure.
 
 In practice:
 
-- **DDL and DML** (`CREATE TABLE`, `INSERT`, `UPDATE`, `DELETE`) reply with a
-  non-JSON status body. `sql:` returns nil - success is the signal (no error).
-- **`SELECT`** in most daemon builds streams Arrow IPC bytes rather than JSON,
-  but with `format:json` requested the server returns a JSON array of row
-  objects keyed by column name when supported.
+- **DDL and DML** (`CREATE TABLE`, `INSERT`, `UPDATE`, `DELETE`) reply with an
+  empty JSON array (`[]`). `sql:` returns `@[]` on success.
+- **`SELECT`** returns a JSON array of row objects keyed by column name.
 
 Errors are mapped to the same error codes as everything else: an HTTP 400 or
 5xx is `MongrelDBErrorQuery`; 409 is `MongrelDBErrorConflict`; and so on. See

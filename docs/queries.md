@@ -9,8 +9,8 @@ to one specialized index; conditions are AND-ed together.
 MongrelDBCondition *cond = [[MongrelDBCondition alloc] init];
 cond.kind = MongrelDBConditionRange;
 cond.columnId = 3;
-cond.lo = 100.0; cond.loSet = YES;
-cond.hi = 500.0; cond.hiSet = YES;
+cond.lo = 100; cond.loSet = YES;
+cond.hi = 500; cond.hiSet = YES;
 BOOL trunc = NO;
 NSArray *rows = [db queryTable:@"orders" conditions:@[cond]
                     projection:@[@1, @2] limit:100 truncated:&trunc error:&e];
@@ -38,7 +38,7 @@ The request body the client builds matches the daemon's `/kit/query` shape:
 ```json
 {
   "table": "orders",
-  "conditions": [{"range": {"column_id": 3, "lo": 100.0, "hi": 500.0}}],
+  "conditions": [{"range": {"column_id": 3, "lo": 100, "hi": 500}}],
   "projection": [1, 2],
   "limit": 100
 }
@@ -65,16 +65,28 @@ NSArray *rows = [db queryTable:@"orders" conditions:@[cond]
                     projection:nil limit:0 truncated:nil error:&e];
 ```
 
-### `MongrelDBConditionRange` - numeric range (learned-range index)
+### `MongrelDBConditionRange` - integer range (learned-range index)
 
-Inclusive bounds. Leave `loSet` / `hiSet` at NO for an open end.
+Inclusive bounds on an integer column. Leave `loSet` / `hiSet` at NO for an open end.
 
 ```objc
 MongrelDBCondition *cond = [[MongrelDBCondition alloc] init];
 cond.kind = MongrelDBConditionRange;
 cond.columnId = 3;
-cond.lo = 100.0; cond.loSet = YES;
-cond.hi = 500.0; cond.hiSet = YES;
+cond.lo = 100; cond.loSet = YES;
+cond.hi = 500; cond.hiSet = YES;
+```
+
+### `MongrelDBConditionRangeF64` - floating-point range
+
+For `float64` columns. Set `loInclusive` / `hiInclusive` explicitly (default NO).
+
+```objc
+MongrelDBCondition *cond = [[MongrelDBCondition alloc] init];
+cond.kind = MongrelDBConditionRangeF64;
+cond.columnId = 3;
+cond.loF64 = 10.5; cond.loSet = YES; cond.loInclusive = YES;
+cond.hiF64 = 99.99; cond.hiSet = YES; cond.hiInclusive = NO;
 ```
 
 ### `MongrelDBConditionBitmapEq` - equality on a bitmap-indexed column
@@ -170,8 +182,8 @@ bitmap.value = @"Alice";
 MongrelDBCondition *range = [[MongrelDBCondition alloc] init];
 range.kind = MongrelDBConditionRange;
 range.columnId = 3;
-range.lo = 100.0; range.loSet = YES;
-range.hi = 500.0; range.hiSet = YES;
+range.lo = 100; range.loSet = YES;
+range.hi = 500; range.hiSet = YES;
 
 NSArray *rows = [db queryTable:@"orders" conditions:@[bitmap, range]
                     projection:@[@1, @3] limit:50 truncated:nil error:&e];

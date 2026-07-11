@@ -3,9 +3,9 @@
  * ObjC client.
  *
  * Does NOT contact a daemon. Serializes a create_table body, a batch txn body,
- * and a query body, then asserts the exact JSON keys and shape the server
- * expects. This catches regressions in the on-wire format without needing a
- * running mongreldb-server.
+ * a query body, and a history-retention body, then asserts the exact JSON keys
+ * and shape the server expects. This catches regressions in the on-wire format
+ * without needing a running mongreldb-server.
  *
  * Licensing: MIT OR Apache-2.0.
  */
@@ -60,6 +60,16 @@ static NSString *sortedJSON(id obj) {
 @end
 
 @implementation CapturingClient
+- (instancetype)init {
+    NSError *error = nil;
+    self = [super initWithURL:@"http://127.0.0.1:8453"
+                        token:nil
+                     username:nil
+                     password:nil
+                        error:&error];
+    (void)error;
+    return self;
+}
 - (nullable id)requestMethod:(NSString *)method
                         path:(NSString *)path
                         body:(nullable NSDictionary *)body
@@ -76,28 +86,28 @@ static NSString *sortedJSON(id obj) {
  * nullable, plus optional enum_variants and default_value when set. */
 static void test_create_table_body(void) {
     MongrelDBColumn *c1 = [MongrelDBColumn columnWithId:1 name:@"id" type:@"int64"
-                                            primaryKey:YES nullable:NO];
+                                            primaryKey:YES isNullable:NO];
     MongrelDBColumn *c2 = [[MongrelDBColumn alloc] init];
     c2.columnId = 4;
     c2.name = @"status";
     c2.type = @"enum";
     c2.primaryKey = NO;
-    c2.nullable = NO;
+    c2.isNullable = NO;
     c2.enumVariants = @[@"active", @"inactive", @"paused"];
 
     MongrelDBColumn *c3 = [MongrelDBColumn columnWithId:5 name:@"created_at"
                                                    type:@"timestamp_nanos"
-                                             primaryKey:NO nullable:NO];
+                                             primaryKey:NO isNullable:NO];
     c3.defaultValue = @"legacy";
     c3.defaultValueJSON = @3;
     c3.defaultExpression = @"now";
     MongrelDBColumn *c4 = [MongrelDBColumn columnWithId:6 name:@"attempts"
                                                    type:@"int64"
-                                             primaryKey:NO nullable:NO];
+                                             primaryKey:NO isNullable:NO];
     c4.defaultValueJSON = @3;
-    MongrelDBColumn *c5 = [MongrelDBColumn columnWithId:7 name:@"s" type:@"varchar" primaryKey:NO nullable:NO]; c5.defaultValueJSON = @"draft";
-    MongrelDBColumn *c6 = [MongrelDBColumn columnWithId:8 name:@"b" type:@"bool" primaryKey:NO nullable:NO]; c6.defaultValueJSON = @YES;
-    MongrelDBColumn *c7 = [MongrelDBColumn columnWithId:9 name:@"n" type:@"varchar" primaryKey:NO nullable:YES]; c7.defaultValueJSON = NSNull.null;
+    MongrelDBColumn *c5 = [MongrelDBColumn columnWithId:7 name:@"s" type:@"varchar" primaryKey:NO isNullable:NO]; c5.defaultValueJSON = @"draft";
+    MongrelDBColumn *c6 = [MongrelDBColumn columnWithId:8 name:@"b" type:@"bool" primaryKey:NO isNullable:NO]; c6.defaultValueJSON = @YES;
+    MongrelDBColumn *c7 = [MongrelDBColumn columnWithId:9 name:@"n" type:@"varchar" primaryKey:NO isNullable:YES]; c7.defaultValueJSON = NSNull.null;
     NSDictionary *constraints = @{
         @"checks": @[@{@"id": @1, @"name": @"id_present",
                          @"expr": @{@"IsNotNull": @1}}],
@@ -149,7 +159,7 @@ static void test_query_body(void) {
     NSDictionary *body = @{
         @"table": @"orders",
         @"conditions": @[
-            @{@"range": @{@"column_id": @(3), @"lo": @(100.0), @"hi": @(500.0)}},
+            @{@"range": @{@"column_id": @(3), @"lo": @(100), @"hi": @(500)}},
         ],
         @"projection": @[@(1), @(2)],
         @"limit": @(100),
@@ -171,6 +181,20 @@ static void test_segment_encoding(void) {
     CHECK([encoded containsString:@"%2F"], "slash must be percent-encoded");
     CHECK([encoded containsString:@"%20"], "space must be percent-encoded");
     (void)encoded;
+}
+
+/* The history retention PUT body must use the exact frozen key. */
+static void test_history_retention_body(void) {
+    CapturingClient *client = [[CapturingClient alloc] init];
+    NSError *error = nil;
+    NSDictionary *result = [client setHistoryRetentionEpochs:42 error:&error];
+    (void)result;
+    CHECK(error == nil, "setHistoryRetentionEpochs returned an error");
+
+    NSDictionary *body = client.capturedBody;
+    NSString *json = sortedJSON(body);
+    CHECK([json containsString:@"\"history_retention_epochs\""], "body missing history_retention_epochs key");
+    CHECK([json containsString:@"\"history_retention_epochs\":42"], "body missing history_retention_epochs value");
 }
 
 /* Error category mapping must follow the HTTP-status contract. */
@@ -201,6 +225,7 @@ int main(int argc, const char *argv[]) {
         RUN(test_txn_body_with_key);
         RUN(test_query_body);
         RUN(test_segment_encoding);
+        RUN(test_history_retention_body);
         RUN(test_error_mapping);
         RUN(test_crlf_rejection);
         printf("\n%d passed, %d failed\n", g_pass, g_fail);

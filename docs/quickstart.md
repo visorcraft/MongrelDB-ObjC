@@ -34,8 +34,9 @@ Fetch a prebuilt server binary from the
 
 ```sh
 mkdir -p bin
+# For Apple Silicon use mongreldb-server-darwin-arm64; for Intel use mongreldb-server-darwin-x64.
 curl -fsSL -o bin/mongreldb-server \
-  https://github.com/visorcraft/MongrelDB/releases/download/v0.48.0/mongreldb-server-macos-x64
+  https://github.com/visorcraft/MongrelDB/releases/download/v0.48.0/mongreldb-server-darwin-arm64
 chmod +x bin/mongreldb-server
 ```
 
@@ -100,14 +101,14 @@ int main(void) {
          *    Both are nil = absent and are dropped from the wire JSON when not
          *    set, so the existing positional form stays valid. */
         MongrelDBColumn *c4 = [[MongrelDBColumn alloc] init];
-        c4.columnId = 4; c4.name = @"status"; c4.type = @"varchar";
-        c4.primaryKey = NO; c4.nullable = NO;
+        c4.columnId = 4; c4.name = @"status"; c4.type = @"enum";
+        c4.primaryKey = NO; c4.isNullable = NO;
         c4.enumVariants = @[@"active", @"inactive", @"paused"];
         c4.defaultValue = @"active";
         NSArray *cols = @[
-            [MongrelDBColumn columnWithId:1 name:@"id" type:@"int64" primaryKey:YES nullable:NO],
-            [MongrelDBColumn columnWithId:2 name:@"customer" type:@"varchar" primaryKey:NO nullable:NO],
-            [MongrelDBColumn columnWithId:3 name:@"amount" type:@"float64" primaryKey:NO nullable:NO],
+            [MongrelDBColumn columnWithId:1 name:@"id" type:@"int64" primaryKey:YES isNullable:NO],
+            [MongrelDBColumn columnWithId:2 name:@"customer" type:@"varchar" primaryKey:NO isNullable:NO],
+            [MongrelDBColumn columnWithId:3 name:@"amount" type:@"float64" primaryKey:NO isNullable:NO],
             c4,
         ];
         [db createTableWithName:@"orders" columns:cols error:&e];
@@ -120,11 +121,12 @@ int main(void) {
             [MongrelDBInputCell cellWithColumnId:4 value:@"active"],
         ] idempotencyKey:nil error:&e];
 
-        /* 5. Query with a native index condition. */
+        /* 5. Query with a native index condition on an integer column. */
         MongrelDBCondition *cond = [[MongrelDBCondition alloc] init];
         cond.kind = MongrelDBConditionRange;
-        cond.columnId = 3;
-        cond.lo = 100.0; cond.loSet = YES;
+        cond.columnId = 1;
+        cond.lo = 1; cond.loSet = YES;
+        cond.hi = 100; cond.hiSet = YES;
         NSArray *rows = [db queryTable:@"orders" conditions:@[cond]
                             projection:@[@1, @2] limit:100 truncated:nil error:&e];
         NSLog(@"rows: %lu", (unsigned long)rows.count);
@@ -161,6 +163,7 @@ You should see the row count of 1.
 | `projection:@[@1,@2]` | Server returns only those column ids, saving bandwidth. |
 | `limit:100` | Caps the result; check the `truncated` out-param afterward. |
 | `countOfTable:error:` | GET `/tables/{name}/count`. |
+| `setHistoryRetentionEpochs:error:` | PUT `/history/retention`; controls time-travel query depth. |
 
 ## 6. Common pitfalls
 

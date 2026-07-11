@@ -58,7 +58,7 @@ daemon directly to a network.
 ## Input validation
 
 - The query builder produces typed JSON requests. Invalid column IDs, value
-  encodings, and numeric ranges are rejected before any request is sent.
+  encodings, and numeric ranges are validated by the daemon on receipt.
 - Server and network errors are mapped to the typed error code hierarchy
   (`MongrelDBErrorAuth`, `MongrelDBErrorNotFound`, `MongrelDBErrorConflict`,
   `MongrelDBErrorQuery`, `MongrelDBErrorNetwork`), not leaked as generic

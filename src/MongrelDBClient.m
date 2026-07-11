@@ -12,6 +12,11 @@
 
 #import "MongrelDBClient.h"
 
+@interface MongrelDBClient ()
+/* Internal raw GET /history/retention response used by the scalar getters. */
+- (nullable NSDictionary<NSString *, NSNumber *> *)historyRetention:(NSError *_Nullable *_Nullable)error;
+@end
+
 /* ── Constants ─────────────────────────────────────────────────────────── */
 
 NSString *const MongrelDBDefaultURL = @"http://127.0.0.1:8453";
@@ -21,11 +26,11 @@ const int64_t MongrelDBMaxResponseBytes = 268435456LL; /* 256 MB */
 
 @implementation MongrelDBInputCell
 
-+ (instancetype)cellWithColumnId:(int64_t)columnId value:(nullable MongrelDBValue)value {
++ (instancetype)cellWithColumnId:(uint16_t)columnId value:(nullable MongrelDBValue)value {
     return [[self alloc] initWithColumnId:columnId value:value];
 }
 
-- (instancetype)initWithColumnId:(int64_t)columnId value:(nullable MongrelDBValue)value {
+- (instancetype)initWithColumnId:(uint16_t)columnId value:(nullable MongrelDBValue)value {
     self = [super init];
     if (self) {
         _columnId = columnId;
@@ -40,18 +45,18 @@ const int64_t MongrelDBMaxResponseBytes = 268435456LL; /* 256 MB */
 
 @implementation MongrelDBColumn
 
-+ (instancetype)columnWithId:(int64_t)columnId
++ (instancetype)columnWithId:(uint16_t)columnId
                         name:(nullable NSString *)name
                         type:(nullable NSString *)type
                  primaryKey:(BOOL)primaryKey
-                    nullable:(BOOL)nullable {
+                  isNullable:(BOOL)isNullable {
     MongrelDBColumn *c = [[self alloc] init];
     if (c) {
         c.columnId = columnId;
         c.name = [name copy];
         c.type = [type copy];
         c.primaryKey = primaryKey;
-        c.nullable = nullable;
+        c.isNullable = isNullable;
     }
     return c;
 }
@@ -65,7 +70,7 @@ const int64_t MongrelDBMaxResponseBytes = 268435456LL; /* 256 MB */
 
 /* ── MongrelDBClient ───────────────────────────────────────────────────── */
 
-@interface MongrelDBClient ()
+@interface MongrelDBClient () <NSURLSessionTaskDelegate>
 @property (nonatomic, copy) NSString *baseURL;
 @property (nonatomic, copy, nullable) NSString *token;
 @property (nonatomic, copy, nullable) NSString *username;
@@ -98,9 +103,9 @@ const int64_t MongrelDBMaxResponseBytes = 268435456LL; /* 256 MB */
      * allow header injection (request splitting). Validate before use. */
     NSArray<NSString *> *creds = token ? @[token] :
         (username ? @[username, password ?: @""] : @[]);
+    NSCharacterSet *crlfSet = [NSCharacterSet characterSetWithCharactersInString:@"\r\n"];
     for (NSString *c in creds) {
-        if ([c rangeOfCharacterFromSet:[NSCharacterSet characterSetWithRange:NSMakeRange('\r', 1)]].location != NSNotFound ||
-            [c rangeOfCharacterFromSet:[NSCharacterSet characterSetWithRange:NSMakeRange('\n', 1)]].location != NSNotFound) {
+        if ([c rangeOfCharacterFromSet:crlfSet].location != NSNotFound) {
             if (error) {
                 *error = [NSError errorWithDomain:MongrelDBErrorDomain
                                              code:MongrelDBErrorInvalidArg
@@ -126,12 +131,14 @@ const int64_t MongrelDBMaxResponseBytes = 268435456LL; /* 256 MB */
 
     NSURLSessionConfiguration *cfg = [NSURLSessionConfiguration defaultSessionConfiguration];
     /* Never follow redirects: an Authorization header could follow a redirect
-     * to an attacker-controlled host. */
+     * to an attacker-controlled host. The delegate method below enforces this. */
     cfg.HTTPShouldSetCookies = NO;
     cfg.timeoutIntervalForRequest = 30.0;
     cfg.timeoutIntervalForResource = 60.0;
     cfg.URLCache = nil;
-    _session = [NSURLSession sessionWithConfiguration:cfg];
+    _session = [NSURLSession sessionWithConfiguration:cfg
+                                             delegate:self
+                                        delegateQueue:[NSOperationQueue new]];
 
     return self;
 }
@@ -156,6 +163,19 @@ const int64_t MongrelDBMaxResponseBytes = 268435456LL; /* 256 MB */
 
 - (void)setTimeout:(NSTimeInterval)seconds {
     _timeout = seconds > 0 ? seconds : 30.0;
+}
+
+/* NSURLSessionTaskDelegate: cancel all HTTP redirects so the Authorization
+ * header cannot leak to an attacker-controlled host. */
+- (void)URLSession:(NSURLSession *)session
+              task:(NSURLSessionTask *)task
+willPerformHTTPRedirection:(NSHTTPURLResponse *)response
+        newRequest:(NSURLRequest *)request
+ completionHandler:(void (^)(NSURLRequest *_Nullable))completionHandler {
+    (void)session; (void)task; (void)response; (void)request;
+    if (completionHandler) {
+        completionHandler(nil);
+    }
 }
 
 - (NSString *)lastError {
@@ -189,19 +209,25 @@ const int64_t MongrelDBMaxResponseBytes = 268435456LL; /* 256 MB */
     return [segment stringByAddingPercentEncodingWithAllowedCharacters:allowed] ?: @"";
 }
 
-/* Synchronous request helper. Returns the decoded JSON body (or nil for empty
- * bodies). Sets *error on failure. */
-- (nullable id)requestMethod:(NSString *)method
+/* Core synchronous request helper. Returns YES on a 2xx response. On success,
+ * *outResponse is set to the decoded JSON body (or nil for an empty or plain-
+ * text body such as /health). On failure, *error is set. */
+- (BOOL)performRequestMethod:(NSString *)method
                         path:(NSString *)path
                        body:(nullable NSDictionary *)body
+                   response:(id *_Nullable)outResponse
                       error:(NSError *_Nullable *_Nullable)error {
+    if (outResponse) {
+        *outResponse = nil;
+    }
+
     NSString *urlStr = [NSString stringWithFormat:@"%@/%@", self.baseURL, path];
     NSURL *url = [NSURL URLWithString:urlStr];
     if (!url) {
         if (error) {
             *error = [self makeError:MongrelDBErrorInvalidArg message:@"invalid URL"];
         }
-        return nil;
+        return NO;
     }
 
     NSMutableURLRequest *req = [[NSMutableURLRequest alloc] initWithURL:url];
@@ -232,7 +258,7 @@ const int64_t MongrelDBMaxResponseBytes = 268435456LL; /* 256 MB */
                                  message:[NSString stringWithFormat:@"cannot encode request: %@",
                                            jsonErr.localizedDescription]];
             }
-            return nil;
+            return NO;
         }
         req.HTTPBody = postData;
         [req setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
@@ -266,7 +292,7 @@ const int64_t MongrelDBMaxResponseBytes = 268435456LL; /* 256 MB */
                              message:[NSString stringWithFormat:@"network error: %@",
                                        netErr.localizedDescription]];
         }
-        return nil;
+        return NO;
     }
 
     NSInteger status = httpResp.statusCode;
@@ -277,7 +303,7 @@ const int64_t MongrelDBMaxResponseBytes = 268435456LL; /* 256 MB */
                              message:[NSString stringWithFormat:@"response body exceeds %lld bytes",
                                        (long long)MongrelDBMaxResponseBytes]];
         }
-        return nil;
+        return NO;
     }
 
     if (status < 200 || status >= 300) {
@@ -307,27 +333,47 @@ const int64_t MongrelDBMaxResponseBytes = 268435456LL; /* 256 MB */
             }
             *error = [self makeError:code message:message];
         }
-        return nil;
+        return NO;
     }
 
     if (respData.length == 0) {
-        return nil;
+        return YES;
     }
     NSError *decErr = nil;
     id parsed = [NSJSONSerialization JSONObjectWithData:respData options:0 error:&decErr];
     if (decErr) {
-        /* Non-JSON 2xx body (e.g. plain "ok" from /health): treat as success
-         * with no body. */
-        return nil;
+        /* /health returns a plain-text 2xx body; treat that as success. */
+        if ([path isEqualToString:@"health"]) {
+            return YES;
+        }
+        if (error) {
+            *error = [self makeError:MongrelDBErrorJSON
+                             message:[NSString stringWithFormat:@"cannot decode response: %@",
+                                       decErr.localizedDescription]];
+        }
+        return NO;
     }
-    return parsed;
+    if (outResponse) {
+        *outResponse = parsed;
+    }
+    return YES;
+}
+
+/* Synchronous request helper. Returns the decoded JSON body (or nil on failure
+ * or for empty bodies). Sets *error on failure. */
+- (nullable id)requestMethod:(NSString *)method
+                        path:(NSString *)path
+                       body:(nullable NSDictionary *)body
+                      error:(NSError *_Nullable *_Nullable)error {
+    id response = nil;
+    BOOL ok = [self performRequestMethod:method path:path body:body response:&response error:error];
+    return ok ? response : nil;
 }
 
 /* ── Health & tables ───────────────────────────────────────────────────── */
 
 - (BOOL)health:(NSError *_Nullable *_Nullable)error {
-    id r = [self requestMethod:@"GET" path:@"health" body:nil error:error];
-    return (r != nil) || (error && *error == nil);
+    return [self performRequestMethod:@"GET" path:@"health" body:nil response:nil error:error];
 }
 
 - (nullable NSArray<NSString *> *)tableNames:(NSError *_Nullable *_Nullable)error {
@@ -373,7 +419,7 @@ const int64_t MongrelDBMaxResponseBytes = 268435456LL; /* 256 MB */
         if (c.name) { d[@"name"] = c.name; }
         if (c.type) { d[@"ty"] = c.type; }
         d[@"primary_key"] = @(c.primaryKey);
-        d[@"nullable"] = @(c.nullable);
+        d[@"nullable"] = @(c.isNullable);
         if (c.enumVariants.count > 0) { d[@"enum_variants"] = c.enumVariants; }
         if (c.defaultExpression) { d[@"default_expr"] = c.defaultExpression; }
         else if (c.defaultValueJSON) { d[@"default_value"] = c.defaultValueJSON; }
@@ -394,8 +440,11 @@ const int64_t MongrelDBMaxResponseBytes = 268435456LL; /* 256 MB */
 
 - (BOOL)dropTableWithName:(NSString *)name error:(NSError *_Nullable *_Nullable)error {
     NSString *seg = [MongrelDBClient encodeSegment:name];
-    [self requestMethod:@"DELETE" path:[NSString stringWithFormat:@"tables/%@", seg] body:nil error:error];
-    return (error && *error == nil);
+    return [self performRequestMethod:@"DELETE"
+                                 path:[NSString stringWithFormat:@"tables/%@", seg]
+                                 body:nil
+                             response:nil
+                                error:error];
 }
 
 - (int64_t)countOfTable:(NSString *)table error:(NSError *_Nullable *_Nullable)error {
@@ -432,7 +481,7 @@ const int64_t MongrelDBMaxResponseBytes = 268435456LL; /* 256 MB */
         @{@"put": @{@"table": table ?: @"",
                     @"cells": [self flattenCells:cells],
                     @"returning": @NO}},
-    ] idempotencyKey:idempotencyKey error:error] != nil || (error && *error == nil);
+    ] idempotencyKey:idempotencyKey error:error] != nil;
 }
 
 - (BOOL)upsertIntoTable:(NSString *)table
@@ -448,15 +497,15 @@ const int64_t MongrelDBMaxResponseBytes = 268435456LL; /* 256 MB */
     }
     op[@"returning"] = @NO;
     return [self transactionWithOps:@[@{@"upsert": op}]
-                     idempotencyKey:idempotencyKey error:error] != nil || (error && *error == nil);
+                     idempotencyKey:idempotencyKey error:error] != nil;
 }
 
 - (BOOL)deleteFromTable:(NSString *)table
-                 rowId:(int64_t)rowId
+                 rowId:(uint64_t)rowId
                  error:(NSError *_Nullable *_Nullable)error {
     return [self transactionWithOps:@[
         @{@"delete": @{@"table": table ?: @"", @"row_id": @(rowId)}},
-    ] idempotencyKey:nil error:error] != nil || (error && *error == nil);
+    ] idempotencyKey:nil error:error] != nil;
 }
 
 - (BOOL)deleteFromTable:(NSString *)table
@@ -464,7 +513,7 @@ const int64_t MongrelDBMaxResponseBytes = 268435456LL; /* 256 MB */
                   error:(NSError *_Nullable *_Nullable)error {
     return [self transactionWithOps:@[
         @{@"delete_by_pk": @{@"table": table ?: @"", @"pk": pk ?: NSNull.null}},
-    ] idempotencyKey:nil error:error] != nil || (error && *error == nil);
+    ] idempotencyKey:nil error:error] != nil;
 }
 
 /* ── Batch transactions ────────────────────────────────────────────────── */
@@ -504,9 +553,25 @@ const int64_t MongrelDBMaxResponseBytes = 268435456LL; /* 256 MB */
             if (cond.hiSet) { d[@"hi"] = @(cond.hi); }
             return @{@"range": d};
         }
-        case MongrelDBConditionFmContains:
+        case MongrelDBConditionRangeF64: {
+            NSMutableDictionary *d = [NSMutableDictionary dictionary];
+            d[@"column_id"] = @(cond.columnId);
+            if (cond.loSet) { d[@"lo"] = @(cond.loF64); }
+            if (cond.hiSet) { d[@"hi"] = @(cond.hiF64); }
+            d[@"lo_inclusive"] = @(cond.loInclusive);
+            d[@"hi_inclusive"] = @(cond.hiInclusive);
+            return @{@"range_f64": d};
+        }
+        case MongrelDBConditionFmContains: {
+            NSString *pattern = @"";
+            if ([cond.value isKindOfClass:[NSString class]]) {
+                pattern = (NSString *)cond.value;
+            } else if (cond.value != nil && cond.value != NSNull.null) {
+                pattern = [NSString stringWithFormat:@"%@", cond.value];
+            }
             return @{@"fm_contains": @{@"column_id": @(cond.columnId),
-                                       @"pattern": cond.value ?: @""}};
+                                       @"pattern": pattern}};
+        }
         case MongrelDBConditionIsNull:
             return @{@"is_null": @{@"column_id": @(cond.columnId)}};
         case MongrelDBConditionIsNotNull:
@@ -568,7 +633,7 @@ const int64_t MongrelDBMaxResponseBytes = 268435456LL; /* 256 MB */
  * is unexpected so callers still get something usable. */
 - (NSDictionary *)decodeQueryRow:(id)raw {
     if (![raw isKindOfClass:[NSDictionary class]]) {
-        return raw ?: @{};
+        return @{};
     }
     NSDictionary *row = (NSDictionary *)raw;
     id cells = [row objectForKey:@"cells"];

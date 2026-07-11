@@ -21,8 +21,8 @@
  *     user rather than sharing one across many threads.
  *
  * Authentication:
- *   - Bearer token (--auth-token mode): connectWithToken:error:.
- *   - HTTP Basic (--auth-users mode): connectWithBasicAuth:error:.
+ *   - Bearer token (--auth-token mode): connectWithURL:token:error:.
+ *   - HTTP Basic (--auth-users mode): connectWithURL:username:password:error:.
  *
  * Licensing: MIT OR Apache-2.0.
  * SPDX-License-Identifier: MIT OR Apache-2.0
@@ -50,35 +50,35 @@ typedef id MongrelDBValue;
 
 /* A single input cell: column id paired with a value, used by put/upsert. */
 @interface MongrelDBInputCell : NSObject
-@property (nonatomic, assign) int64_t columnId;
+@property (nonatomic, assign) uint16_t columnId;
 @property (nonatomic, strong, nullable) MongrelDBValue value;
-+ (instancetype)cellWithColumnId:(int64_t)columnId value:(nullable MongrelDBValue)value;
-- (instancetype)initWithColumnId:(int64_t)columnId value:(nullable MongrelDBValue)value;
++ (instancetype)cellWithColumnId:(uint16_t)columnId value:(nullable MongrelDBValue)value;
+- (instancetype)initWithColumnId:(uint16_t)columnId value:(nullable MongrelDBValue)value;
 @end
 
 /* Column definition passed to createTable. Column ids are stable on-wire
  * identifiers used everywhere else (cells, conditions, projection). */
 @interface MongrelDBColumn : NSObject
-@property (nonatomic, assign) int64_t columnId;
+@property (nonatomic, assign) uint16_t columnId;
 @property (nonatomic, copy, nullable) NSString *name;
 @property (nonatomic, copy, nullable) NSString *type;     /* "int64","varchar","float64","bool",... */
 @property (nonatomic, assign) BOOL primaryKey;
-@property (nonatomic, assign) BOOL nullable;
-/* Optional: fixed set of allowed values for a text column. nil = absent.
+@property (nonatomic, assign) BOOL isNullable;
+/* Optional: fixed set of allowed values for an enum column. nil = absent.
  * Wire emit: "enum_variants": ["a","b"]. */
 @property (nonatomic, copy, nullable) NSArray<NSString *> *enumVariants;
-/* Optional: default value for the column. nil = absent.
- * Wire emit: "default_value": "<value>". */
+/* Optional: default string value for the column. nil = absent.
+ * Wire emit: "default_value": "<string>". */
 @property (nonatomic, copy, nullable) NSString *defaultValue;
-/* Optional static JSON scalar. Takes precedence over defaultValue. */
+/* Optional static JSON scalar. Has precedence over defaultValue. */
 @property (nonatomic, copy, nullable) MongrelDBValue defaultValueJSON;
-/* Optional dynamic default: "now" or "uuid". */
+/* Optional dynamic default: "now" or "uuid". Has the highest precedence. */
 @property (nonatomic, copy, nullable) NSString *defaultExpression;
-+ (instancetype)columnWithId:(int64_t)columnId
++ (instancetype)columnWithId:(uint16_t)columnId
                         name:(nullable NSString *)name
                         type:(nullable NSString *)type
                  primaryKey:(BOOL)primaryKey
-                    nullable:(BOOL)nullable;
+                  isNullable:(BOOL)isNullable;
 @end
 
 /* A query condition. Set kind and the relevant fields; see the convenience
@@ -90,16 +90,23 @@ typedef NS_ENUM(NSInteger, MongrelDBConditionKind) {
     MongrelDBConditionFmContains   = 3,
     MongrelDBConditionIsNull       = 4,
     MongrelDBConditionIsNotNull    = 5,
+    MongrelDBConditionRangeF64     = 6,
 };
 
 @interface MongrelDBCondition : NSObject
 @property (nonatomic, assign) MongrelDBConditionKind kind;
-@property (nonatomic, assign) int64_t columnId;
-@property (nonatomic, assign) double lo;
-@property (nonatomic, assign) double hi;
+@property (nonatomic, assign) uint16_t columnId;
+/* Range endpoints. Use lo/hi for integer ranges (MongrelDBConditionRange);
+ * loF64/hiF64 for floating-point ranges (MongrelDBConditionRangeF64). */
+@property (nonatomic, assign) int64_t lo;
+@property (nonatomic, assign) int64_t hi;
+@property (nonatomic, assign) double loF64;
+@property (nonatomic, assign) double hiF64;
+@property (nonatomic, assign) BOOL loInclusive;
+@property (nonatomic, assign) BOOL hiInclusive;
 @property (nonatomic, assign) BOOL loSet;
 @property (nonatomic, assign) BOOL hiSet;
-/* PK match / bitmap_eq value / fm_contains pattern. */
+/* PK match / bitmap_eq value / fm_contains pattern (must be NSString). */
 @property (nonatomic, strong, nullable) MongrelDBValue value;
 @end
 
@@ -138,7 +145,6 @@ typedef NS_ENUM(NSInteger, MongrelDBConditionKind) {
 - (nullable NSArray<NSString *> *)tableNames:(NSError *_Nullable *_Nullable)error;
 
 - (nullable NSDictionary<NSString *, NSNumber *> *)setHistoryRetentionEpochs:(uint64_t)epochs error:(NSError *_Nullable *_Nullable)error;
-- (nullable NSDictionary<NSString *, NSNumber *> *)historyRetention:(NSError *_Nullable *_Nullable)error;
 - (uint64_t)historyRetentionEpochs:(NSError *_Nullable *_Nullable)error;
 - (uint64_t)earliestRetainedEpoch:(NSError *_Nullable *_Nullable)error;
 
@@ -179,7 +185,7 @@ typedef NS_ENUM(NSInteger, MongrelDBConditionKind) {
 
 /* Delete by internal row id. */
 - (BOOL)deleteFromTable:(NSString *)table
-                 rowId:(int64_t)rowId
+                 rowId:(uint64_t)rowId
                  error:(NSError *_Nullable *_Nullable)error;
 
 /* Delete by primary-key value. */
@@ -215,8 +221,8 @@ typedef NS_ENUM(NSInteger, MongrelDBConditionKind) {
 
 #pragma mark SQL & schema
 
-/* POST /sql {"sql":...,"format":"json"}. Returns the decoded JSON body (rows
- * for SELECT, or the status object for DDL/DML). */
+/* POST /sql {"sql":...,"format":"json"}. Returns the decoded JSON body (an
+ * array of rows for SELECT, or an empty array for DDL/DML). */
 - (nullable id)sql:(NSString *)sql error:(NSError *_Nullable *_Nullable)error;
 
 /* GET /kit/schema. Returns the full schema catalog. */

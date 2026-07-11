@@ -7,10 +7,11 @@
  * Point at an already-running daemon with the MONGRELDB_URL environment
  * variable. By default this connects to http://127.0.0.1:8453.
  *
- * The 14-operation conformance matrix mirrors the other official clients:
- * health, create_table, drop_table, count, put, upsert, delete (by row id),
- * delete_by_pk, query (pk), query (range), transaction (batch commit),
- * table_names, schema, schema_for, sql, idempotency_key, error not_found.
+ * The 16-operation conformance matrix mirrors the other official clients:
+ * health, create_table, count, put, upsert, query (pk), query (range),
+ * transaction (batch commit), delete_by_pk, delete (by row id), string values,
+ * sql, table_names, schema_for, error not_found, idempotency_key, history
+ * retention.
  *
  * Licensing: MIT OR Apache-2.0.
  */
@@ -99,35 +100,35 @@ static void setupDaemon(void) {
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
 
-static MongrelDBColumn *intCol(int64_t id, NSString *name, BOOL pk) {
+static MongrelDBColumn *intCol(uint16_t id, NSString *name, BOOL pk) {
     return [MongrelDBColumn columnWithId:id name:name type:@"int64"
-                             primaryKey:pk nullable:!pk];
+                             primaryKey:pk isNullable:!pk];
 }
 
-static MongrelDBColumn *floatCol(int64_t id, NSString *name) {
+static MongrelDBColumn *floatCol(uint16_t id, NSString *name) {
     return [MongrelDBColumn columnWithId:id name:name type:@"float64"
-                             primaryKey:NO nullable:NO];
+                             primaryKey:NO isNullable:NO];
 }
 
-static MongrelDBColumn *varcharCol(int64_t id, NSString *name) {
+static MongrelDBColumn *varcharCol(uint16_t id, NSString *name) {
     MongrelDBColumn *c = [[MongrelDBColumn alloc] init];
     c.columnId = id;
     c.name = name;
     c.type = @"varchar";
     c.primaryKey = NO;
-    c.nullable = NO;
+    c.isNullable = NO;
     return c;
 }
 
-static MongrelDBInputCell *i64Cell(int64_t col, int64_t v) {
+static MongrelDBInputCell *i64Cell(uint16_t col, int64_t v) {
     return [MongrelDBInputCell cellWithColumnId:col value:@(v)];
 }
 
-static MongrelDBInputCell *f64Cell(int64_t col, double v) {
+static MongrelDBInputCell *f64Cell(uint16_t col, double v) {
     return [MongrelDBInputCell cellWithColumnId:col value:@(v)];
 }
 
-static MongrelDBInputCell *strCell(int64_t col, NSString *v) {
+static MongrelDBInputCell *strCell(uint16_t col, NSString *v) {
     return [MongrelDBInputCell cellWithColumnId:col value:v];
 }
 
@@ -148,7 +149,7 @@ static id rowValue(NSDictionary *row, int64_t colId) {
     return v;
 }
 
-/* ── Tests (14-operation conformance matrix) ───────────────────────────── */
+/* ── Tests (16-operation conformance matrix) ───────────────────────────── */
 
 /* 1. health */
 static void test_health(void) {
@@ -302,22 +303,22 @@ static void test_delete_by_row_id(void) {
     freshTable(@"objc_delrow", cols);
     NSError *e = nil;
     [g_client putIntoTable:@"objc_delrow" cells:@[i64Cell(1, 7)] idempotencyKey:nil error:&e];
-    /* Query to find the row_id. The PK query returns the row keyed by column id;
-     * row_id is the internal id. We look it up by querying and reading the
-     * server's row_id if present; otherwise delete by PK as a fallback path. */
+    CHECK(e == nil, @"put failed: %@", e.localizedDescription);
+    /* Query to find the row_id. The server includes a `row_id` key in every
+     * native query row. */
     MongrelDBCondition *cond = [[MongrelDBCondition alloc] init];
     cond.kind = MongrelDBConditionPK;
     cond.value = @(7);
     NSArray *rows = [g_client queryTable:@"objc_delrow" conditions:@[cond]
                                projection:nil limit:0 truncated:nil error:&e];
     CHECK(e == nil, @"query failed: %@", e.localizedDescription);
-    /* Delete by PK instead since row_id is internal; exercise delete(rowId)
-     * path with row_id 1 (first inserted row on a fresh table). */
-    [g_client deleteFromTable:@"objc_delrow" rowId:1 error:&e];
+    CHECK(rows.count == 1, @"expected 1 row, got %lu", (unsigned long)rows.count);
+    NSNumber *rowId = rows[0][@"row_id"];
+    CHECK(rowId != nil, @"row_id missing from query row");
+    [g_client deleteFromTable:@"objc_delrow" rowId:rowId.unsignedLongLongValue error:&e];
     CHECK(e == nil, @"delete(rowId) failed: %@", e.localizedDescription);
     int64_t n = [g_client countOfTable:@"objc_delrow" error:&e];
     CHECK(n == 0, @"expected 0 rows after delete by row id, got %lld", (long long)n);
-    (void)rows;
 }
 
 /* 10. string values round-trip */
@@ -421,6 +422,33 @@ static void test_idempotency_key(void) {
     CHECK(n == 1, @"expected 1 row after duplicate idempotent commit, got %lld", (long long)n);
 }
 
+/* 16. history retention */
+static void test_history_retention(void) {
+    SKIP_IF_NO_DAEMON();
+    NSError *e = nil;
+    uint64_t original = [g_client historyRetentionEpochs:&e];
+    CHECK(e == nil, @"historyRetentionEpochs failed: %@", e.localizedDescription);
+
+    NSDictionary *result = [g_client setHistoryRetentionEpochs:1000 error:&e];
+    CHECK(e == nil, @"setHistoryRetentionEpochs failed: %@", e.localizedDescription);
+    CHECK(result != nil, @"setHistoryRetentionEpochs returned nil");
+    CHECK([result[@"history_retention_epochs"] unsignedLongLongValue] == 1000,
+          @"setHistoryRetentionEpochs did not return the new window");
+    CHECK([result[@"earliest_retained_epoch"] unsignedLongLongValue] <= 1000,
+          @"setHistoryRetentionEpochs returned an invalid earliest epoch");
+
+    uint64_t epochs = [g_client historyRetentionEpochs:&e];
+    CHECK(e == nil, @"historyRetentionEpochs getter failed: %@", e.localizedDescription);
+    CHECK(epochs == 1000, @"historyRetentionEpochs getter did not reflect the set window");
+
+    uint64_t earliest = [g_client earliestRetainedEpoch:&e];
+    CHECK(e == nil, @"earliestRetainedEpoch getter failed: %@", e.localizedDescription);
+    CHECK(earliest <= 1000, @"earliestRetainedEpoch getter returned an invalid epoch");
+
+    /* Restore the original window. */
+    [g_client setHistoryRetentionEpochs:original error:&e];
+}
+
 /* ── Main ──────────────────────────────────────────────────────────────── */
 
 int main(int argc, const char *argv[]) {
@@ -444,6 +472,7 @@ int main(int argc, const char *argv[]) {
         RUN(test_schema_for);
         RUN(test_error_not_found);
         RUN(test_idempotency_key);
+        RUN(test_history_retention);
 
         printf("\n%d passed, %d failed, %d skipped\n", g_pass, g_fail, g_skip);
         return g_fail > 0 ? 1 : 0;

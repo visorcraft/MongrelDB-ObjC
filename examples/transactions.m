@@ -64,15 +64,15 @@ int main(int argc, const char *argv[]) {
 
         /* Column schema (enum + default columns). */
         MongrelDBColumn *c1 = [MongrelDBColumn columnWithId:1 name:@"id" type:@"int64"
-                                                primaryKey:YES nullable:NO];
+                                                primaryKey:YES isNullable:NO];
         MongrelDBColumn *c2 = [MongrelDBColumn columnWithId:2 name:@"name" type:@"varchar"
-                                                primaryKey:NO nullable:NO];
+                                                primaryKey:NO isNullable:NO];
         MongrelDBColumn *c3 = [[MongrelDBColumn alloc] init];
         c3.columnId = 3; c3.name = @"score"; c3.type = @"float64";
-        c3.primaryKey = NO; c3.nullable = NO; c3.defaultValueJSON = @0.0;
+        c3.primaryKey = NO; c3.isNullable = NO; c3.defaultValueJSON = @0.0;
         MongrelDBColumn *c4 = [[MongrelDBColumn alloc] init];
-        c4.columnId = 4; c4.name = @"status"; c4.type = @"varchar";
-        c4.primaryKey = NO; c4.nullable = NO;
+        c4.columnId = 4; c4.name = @"status"; c4.type = @"enum";
+        c4.primaryKey = NO; c4.isNullable = NO;
         c4.enumVariants = @[@"active", @"inactive", @"paused"];
         c4.defaultValue = @"active";
 

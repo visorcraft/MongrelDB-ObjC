@@ -76,9 +76,9 @@ int main(int argc, const char *argv[]) {
          *   col 3 = score (float64)
          */
         NSArray *cols = @[
-            [MongrelDBColumn columnWithId:1 name:@"id" type:@"int64" primaryKey:YES nullable:NO],
-            [MongrelDBColumn columnWithId:2 name:@"name" type:@"varchar" primaryKey:NO nullable:NO],
-            [MongrelDBColumn columnWithId:3 name:@"score" type:@"float64" primaryKey:NO nullable:NO],
+            [MongrelDBColumn columnWithId:1 name:@"id" type:@"int64" primaryKey:YES isNullable:NO],
+            [MongrelDBColumn columnWithId:2 name:@"name" type:@"varchar" primaryKey:NO isNullable:NO],
+            [MongrelDBColumn columnWithId:3 name:@"score" type:@"float64" primaryKey:NO isNullable:NO],
         ];
 
         if (![db health:&e]) {
@@ -94,7 +94,6 @@ int main(int argc, const char *argv[]) {
         printf("Created table %s (id %lld)\n", table.UTF8String, (long long)tid);
 
         /* Load five rows with varying scores. */
-        NSArray *mk(NSString *name, double score); (void)mk;
         rows_to_insert = @[
             @[ @1, @"Alice", @40.0 ],
             @[ @2, @"Bob",   @65.0 ],
@@ -115,10 +114,10 @@ int main(int argc, const char *argv[]) {
 
         /* Range query: 60 <= score <= 90 (both inclusive). */
         rangeCond = [[MongrelDBCondition alloc] init];
-        rangeCond.kind = MongrelDBConditionRange;
+        rangeCond.kind = MongrelDBConditionRangeF64;
         rangeCond.columnId = 3;
-        rangeCond.lo = 60.0; rangeCond.loSet = YES;
-        rangeCond.hi = 90.0; rangeCond.hiSet = YES;
+        rangeCond.loF64 = 60.0; rangeCond.loSet = YES; rangeCond.loInclusive = YES;
+        rangeCond.hiF64 = 90.0; rangeCond.hiSet = YES; rangeCond.hiInclusive = YES;
         res = [db queryTable:table conditions:@[rangeCond] projection:nil
                                  limit:0 truncated:nil error:&e];
         if (e) { fprintf(stderr, "range query failed: %s\n", e.localizedDescription.UTF8String); goto cleanup; }

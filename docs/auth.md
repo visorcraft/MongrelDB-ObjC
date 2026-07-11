@@ -31,7 +31,7 @@ MongrelDBClient *db = [MongrelDBClient connectWithURL:@"http://127.0.0.1:8453"
                                                 token:@"s3cret-token"
                                                error:&e];
 
-if ([db health:&e] && e && e.code == MongrelDBErrorAuth) {
+if (![db health:&e] && e && e.code == MongrelDBErrorAuth) {
     NSLog(@"bad or missing token");
     return 1;
 }
