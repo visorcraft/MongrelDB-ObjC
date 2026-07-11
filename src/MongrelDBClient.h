@@ -70,6 +70,10 @@ typedef id MongrelDBValue;
 /* Optional: default value for the column. nil = absent.
  * Wire emit: "default_value": "<value>". */
 @property (nonatomic, copy, nullable) NSString *defaultValue;
+/* Optional static JSON scalar. Takes precedence over defaultValue. */
+@property (nonatomic, copy, nullable) MongrelDBValue defaultValueJSON;
+/* Optional dynamic default: "now" or "uuid". */
+@property (nonatomic, copy, nullable) NSString *defaultExpression;
 + (instancetype)columnWithId:(int64_t)columnId
                         name:(nullable NSString *)name
                         type:(nullable NSString *)type

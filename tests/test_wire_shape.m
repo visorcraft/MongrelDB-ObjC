@@ -88,7 +88,13 @@ static void test_create_table_body(void) {
     MongrelDBColumn *c3 = [MongrelDBColumn columnWithId:5 name:@"created_at"
                                                    type:@"timestamp_nanos"
                                              primaryKey:NO nullable:NO];
-    c3.defaultValue = @"now";
+    c3.defaultValue = @"legacy";
+    c3.defaultValueJSON = @3;
+    c3.defaultExpression = @"now";
+    MongrelDBColumn *c4 = [MongrelDBColumn columnWithId:6 name:@"attempts"
+                                                   type:@"int64"
+                                             primaryKey:NO nullable:NO];
+    c4.defaultValueJSON = @3;
     NSDictionary *constraints = @{
         @"checks": @[@{@"id": @1, @"name": @"id_present",
                          @"expr": @{@"IsNotNull": @1}}],
@@ -96,7 +102,7 @@ static void test_create_table_body(void) {
     CapturingClient *client = [[CapturingClient alloc] init];
     NSError *error = nil;
     int64_t tableId = [client createTableWithName:@"orders"
-                                          columns:@[c1, c2, c3]
+                                          columns:@[c1, c2, c3, c4]
                                       constraints:constraints
                                             error:&error];
     CHECK(error == nil, "createTable returned an error");
@@ -108,7 +114,10 @@ static void test_create_table_body(void) {
     CHECK([json containsString:@"\"ty\":\"int64\""], "body missing column type");
     CHECK([json containsString:@"\"primary_key\":true"], "body missing primary_key");
     CHECK([json containsString:@"\"enum_variants\""], "body missing enum_variants");
-    CHECK([json containsString:@"\"default_value\":\"now\""], "body missing default_value");
+    CHECK([json containsString:@"\"default_value\":3"], "body missing scalar default_value");
+    CHECK([json containsString:@"\"default_expr\":\"now\""], "body missing default_expr");
+    NSDictionary *created = [body[@"columns"] objectAtIndex:2];
+    CHECK(created[@"default_value"] == nil, "default_expr did not suppress default_value");
     CHECK([json containsString:@"\"constraints\""], "body missing constraints");
     CHECK([json containsString:@"\"checks\""], "body missing constraints.checks");
     CHECK([json containsString:@"\"IsNotNull\":1"], "body missing check expression");

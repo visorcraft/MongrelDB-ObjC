@@ -172,6 +172,8 @@ statusCol.primaryKey = NO;
 statusCol.nullable = NO;
 /* Wire emit: "enum_variants": ["active","inactive","paused"] */
 statusCol.enumVariants = @[@"active", @"inactive", @"paused"];
+statusCol.defaultValueJSON = @3;       /* static JSON scalar */
+statusCol.defaultExpression = @"uuid"; /* dynamic, highest precedence */
 MongrelDBColumn *createdAt = [MongrelDBColumn columnWithId:4
     name:@"created_at" type:@"timestamp_nanos" primaryKey:NO nullable:NO];
 createdAt.defaultValue = @"now";

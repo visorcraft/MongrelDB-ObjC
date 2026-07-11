@@ -351,7 +351,9 @@ const int64_t MongrelDBMaxResponseBytes = 268435456LL; /* 256 MB */
         d[@"primary_key"] = @(c.primaryKey);
         d[@"nullable"] = @(c.nullable);
         if (c.enumVariants.count > 0) { d[@"enum_variants"] = c.enumVariants; }
-        if (c.defaultValue) { d[@"default_value"] = c.defaultValue; }
+        if (c.defaultExpression) { d[@"default_expr"] = c.defaultExpression; }
+        else if (c.defaultValueJSON) { d[@"default_value"] = c.defaultValueJSON; }
+        else if (c.defaultValue) { d[@"default_value"] = c.defaultValue; }
         [cols addObject:d];
     }
     NSMutableDictionary *body = [@{@"name": name ?: @"", @"columns": cols} mutableCopy];
