@@ -138,7 +138,7 @@ static void freshTable(NSString *name, NSArray<MongrelDBColumn *> *cols) {
     e = nil;
     [g_client createTableWithName:name columns:cols error:&e];
     if (e) {
-        FAIL("create_table %@: %@", name, e.localizedDescription);
+        FAIL(@"create_table %@: %@", name, e.localizedDescription);
     }
 }
 
@@ -155,7 +155,7 @@ static void test_health(void) {
     SKIP_IF_NO_DAEMON();
     NSError *e = nil;
     BOOL ok = [g_client health:&e];
-    CHECK(ok, "health failed: %@", e.localizedDescription);
+    CHECK(ok, @"health failed: %@", e.localizedDescription);
 }
 
 /* 2. create_table + count */
@@ -165,8 +165,8 @@ static void test_create_table_and_count(void) {
     freshTable(@"objc_tbl_count", cols);
     NSError *e = nil;
     int64_t n = [g_client countOfTable:@"objc_tbl_count" error:&e];
-    CHECK(e == nil, "count failed: %@", e.localizedDescription);
-    CHECK(n == 0, "expected 0 rows, got %lld", (long long)n);
+    CHECK(e == nil, @"count failed: %@", e.localizedDescription);
+    CHECK(n == 0, @"expected 0 rows, got %lld", (long long)n);
 }
 
 /* 3. put + count */
@@ -178,11 +178,11 @@ static void test_put_and_count(void) {
     NSArray *r1 = @[i64Cell(1, 1), f64Cell(2, 99.5)];
     NSArray *r2 = @[i64Cell(1, 2), f64Cell(2, 150.0)];
     BOOL ok = [g_client putIntoTable:@"objc_put" cells:r1 idempotencyKey:nil error:&e];
-    CHECK(ok && e == nil, "put r1 failed: %@", e.localizedDescription);
+    CHECK(ok && e == nil, @"put r1 failed: %@", e.localizedDescription);
     ok = [g_client putIntoTable:@"objc_put" cells:r2 idempotencyKey:nil error:&e];
-    CHECK(ok && e == nil, "put r2 failed: %@", e.localizedDescription);
+    CHECK(ok && e == nil, @"put r2 failed: %@", e.localizedDescription);
     int64_t n = [g_client countOfTable:@"objc_put" error:&e];
-    CHECK(n == 2, "expected 2 rows, got %lld", (long long)n);
+    CHECK(n == 2, @"expected 2 rows, got %lld", (long long)n);
 }
 
 /* 4. upsert (update on conflict) */
@@ -193,15 +193,15 @@ static void test_upsert(void) {
     NSError *e = nil;
     NSArray *r1 = @[i64Cell(1, 1), f64Cell(2, 10.0)];
     [g_client putIntoTable:@"objc_upsert" cells:r1 idempotencyKey:nil error:&e];
-    CHECK(e == nil, "put failed: %@", e.localizedDescription);
+    CHECK(e == nil, @"put failed: %@", e.localizedDescription);
 
     /* Upsert same PK with update on conflict. */
     NSArray *up = @[i64Cell(1, 1), f64Cell(2, 20.0)];
     NSArray *upd = @[f64Cell(2, 20.0)];
     [g_client upsertIntoTable:@"objc_upsert" cells:up updateCells:upd idempotencyKey:nil error:&e];
-    CHECK(e == nil, "upsert failed: %@", e.localizedDescription);
+    CHECK(e == nil, @"upsert failed: %@", e.localizedDescription);
     int64_t n = [g_client countOfTable:@"objc_upsert" error:&e];
-    CHECK(n == 1, "expected 1 row after upsert, got %lld", (long long)n);
+    CHECK(n == 1, @"expected 1 row after upsert, got %lld", (long long)n);
 
     /* Query back and verify the updated value. */
     MongrelDBCondition *cond = [[MongrelDBCondition alloc] init];
@@ -209,10 +209,10 @@ static void test_upsert(void) {
     cond.value = @(1);
     NSArray *rows = [g_client queryTable:@"objc_upsert" conditions:@[cond]
                                projection:nil limit:0 truncated:nil error:&e];
-    CHECK(e == nil, "query failed: %@", e.localizedDescription);
-    CHECK(rows.count == 1, "expected 1 row from pk query, got %lu", (unsigned long)rows.count);
+    CHECK(e == nil, @"query failed: %@", e.localizedDescription);
+    CHECK(rows.count == 1, @"expected 1 row from pk query, got %lu", (unsigned long)rows.count);
     NSNumber *amt = rowValue(rows[0], 2);
-    CHECK([amt doubleValue] == 20.0, "expected updated amount 20.0, got %@", amt);
+    CHECK([amt doubleValue] == 20.0, @"expected updated amount 20.0, got %@", amt);
 }
 
 /* 5. query by primary key */
@@ -223,17 +223,17 @@ static void test_query_by_pk(void) {
     NSError *e = nil;
     [g_client putIntoTable:@"objc_pk" cells:@[i64Cell(1, 42)] idempotencyKey:nil error:&e];
     [g_client putIntoTable:@"objc_pk" cells:@[i64Cell(1, 43)] idempotencyKey:nil error:&e];
-    CHECK(e == nil, "put failed: %@", e.localizedDescription);
+    CHECK(e == nil, @"put failed: %@", e.localizedDescription);
 
     MongrelDBCondition *cond = [[MongrelDBCondition alloc] init];
     cond.kind = MongrelDBConditionPK;
     cond.value = @(42);
     NSArray *rows = [g_client queryTable:@"objc_pk" conditions:@[cond]
                                projection:nil limit:0 truncated:nil error:&e];
-    CHECK(e == nil, "query failed: %@", e.localizedDescription);
-    CHECK(rows.count == 1, "expected 1 row, got %lu", (unsigned long)rows.count);
+    CHECK(e == nil, @"query failed: %@", e.localizedDescription);
+    CHECK(rows.count == 1, @"expected 1 row, got %lu", (unsigned long)rows.count);
     NSNumber *pk = rowValue(rows[0], 1);
-    CHECK([pk longLongValue] == 42, "expected returned pk 42, got %@", pk);
+    CHECK([pk longLongValue] == 42, @"expected returned pk 42, got %@", pk);
 }
 
 /* 6. query by range */
@@ -245,7 +245,7 @@ static void test_query_range(void) {
     [g_client putIntoTable:@"objc_range" cells:@[i64Cell(1, 1), i64Cell(2, 50)] idempotencyKey:nil error:&e];
     [g_client putIntoTable:@"objc_range" cells:@[i64Cell(1, 2), i64Cell(2, 120)] idempotencyKey:nil error:&e];
     [g_client putIntoTable:@"objc_range" cells:@[i64Cell(1, 3), i64Cell(2, 200)] idempotencyKey:nil error:&e];
-    CHECK(e == nil, "put failed: %@", e.localizedDescription);
+    CHECK(e == nil, @"put failed: %@", e.localizedDescription);
 
     MongrelDBCondition *cond = [[MongrelDBCondition alloc] init];
     cond.kind = MongrelDBConditionRange;
@@ -255,11 +255,11 @@ static void test_query_range(void) {
     BOOL trunc = NO;
     NSArray *rows = [g_client queryTable:@"objc_range" conditions:@[cond]
                                projection:nil limit:0 truncated:&trunc error:&e];
-    CHECK(e == nil, "range query failed: %@", e.localizedDescription);
-    CHECK(rows.count == 1, "expected exactly 1 matching row, got %lu", (unsigned long)rows.count);
-    CHECK(trunc == NO, "result should not be truncated");
+    CHECK(e == nil, @"range query failed: %@", e.localizedDescription);
+    CHECK(rows.count == 1, @"expected exactly 1 matching row, got %lu", (unsigned long)rows.count);
+    CHECK(trunc == NO, @"result should not be truncated");
     NSNumber *pk = rowValue(rows[0], 1);
-    CHECK([pk longLongValue] == 2, "expected returned pk 2, got %@", pk);
+    CHECK([pk longLongValue] == 2, @"expected returned pk 2, got %@", pk);
 }
 
 /* 7. transaction (batch commit) */
@@ -274,10 +274,10 @@ static void test_transaction_commit(void) {
         @{@"put": @{@"table": @"objc_txn", @"cells": @[@(1), @(3)], @"returning": @NO}},
     ];
     NSArray *results = [g_client transactionWithOps:ops idempotencyKey:nil error:&e];
-    CHECK(e == nil, "commit failed: %@", e.localizedDescription);
+    CHECK(e == nil, @"commit failed: %@", e.localizedDescription);
     (void)results;
     int64_t n = [g_client countOfTable:@"objc_txn" error:&e];
-    CHECK(n == 3, "expected 3 rows after commit, got %lld", (long long)n);
+    CHECK(n == 3, @"expected 3 rows after commit, got %lld", (long long)n);
 }
 
 /* 8. delete_by_pk */
@@ -288,11 +288,11 @@ static void test_delete_by_pk(void) {
     NSError *e = nil;
     [g_client putIntoTable:@"objc_del" cells:@[i64Cell(1, 5)] idempotencyKey:nil error:&e];
     int64_t n = [g_client countOfTable:@"objc_del" error:&e];
-    CHECK(n == 1, "expected 1 row, got %lld", (long long)n);
+    CHECK(n == 1, @"expected 1 row, got %lld", (long long)n);
     [g_client deleteFromTable:@"objc_del" primaryKeyValue:@(5) error:&e];
-    CHECK(e == nil, "delete_by_pk failed: %@", e.localizedDescription);
+    CHECK(e == nil, @"delete_by_pk failed: %@", e.localizedDescription);
     n = [g_client countOfTable:@"objc_del" error:&e];
-    CHECK(n == 0, "expected 0 rows after delete, got %lld", (long long)n);
+    CHECK(n == 0, @"expected 0 rows after delete, got %lld", (long long)n);
 }
 
 /* 9. delete by row id */
@@ -310,13 +310,13 @@ static void test_delete_by_row_id(void) {
     cond.value = @(7);
     NSArray *rows = [g_client queryTable:@"objc_delrow" conditions:@[cond]
                                projection:nil limit:0 truncated:nil error:&e];
-    CHECK(e == nil, "query failed: %@", e.localizedDescription);
+    CHECK(e == nil, @"query failed: %@", e.localizedDescription);
     /* Delete by PK instead since row_id is internal; exercise delete(rowId)
      * path with row_id 1 (first inserted row on a fresh table). */
     [g_client deleteFromTable:@"objc_delrow" rowId:1 error:&e];
-    CHECK(e == nil, "delete(rowId) failed: %@", e.localizedDescription);
+    CHECK(e == nil, @"delete(rowId) failed: %@", e.localizedDescription);
     int64_t n = [g_client countOfTable:@"objc_delrow" error:&e];
-    CHECK(n == 0, "expected 0 rows after delete by row id, got %lld", (long long)n);
+    CHECK(n == 0, @"expected 0 rows after delete by row id, got %lld", (long long)n);
     (void)rows;
 }
 
@@ -329,18 +329,18 @@ static void test_string_values(void) {
     [g_client putIntoTable:@"objc_str"
                      cells:@[i64Cell(1, 1), strCell(2, @"hello world"), f64Cell(3, 1.5)]
             idempotencyKey:nil error:&e];
-    CHECK(e == nil, "put failed: %@", e.localizedDescription);
+    CHECK(e == nil, @"put failed: %@", e.localizedDescription);
 
     MongrelDBCondition *cond = [[MongrelDBCondition alloc] init];
     cond.kind = MongrelDBConditionPK;
     cond.value = @(1);
     NSArray *rows = [g_client queryTable:@"objc_str" conditions:@[cond]
                                projection:nil limit:0 truncated:nil error:&e];
-    CHECK(e == nil, "query failed: %@", e.localizedDescription);
-    CHECK(rows.count == 1, "expected 1 row, got %lu", (unsigned long)rows.count);
+    CHECK(e == nil, @"query failed: %@", e.localizedDescription);
+    CHECK(rows.count == 1, @"expected 1 row, got %lu", (unsigned long)rows.count);
     NSString *label = rowValue(rows[0], 2);
     CHECK([label isKindOfClass:[NSString class]] && [label isEqualToString:@"hello world"],
-          "expected label 'hello world', got %@", label);
+          @"expected label 'hello world', got %@", label);
 }
 
 /* 11. sql */
@@ -350,13 +350,13 @@ static void test_sql(void) {
     freshTable(@"objc_sql", cols);
     NSError *e = nil;
     int64_t n = [g_client countOfTable:@"objc_sql" error:&e];
-    CHECK(n == 0, "expected 0 rows before SQL INSERT, got %lld", (long long)n);
+    CHECK(n == 0, @"expected 0 rows before SQL INSERT, got %lld", (long long)n);
 
     /* INSERT via SQL must increase the row count. */
     id body = [g_client sql:@"INSERT INTO objc_sql (id, amount) VALUES (10, 42)" error:&e];
-    CHECK(e == nil, "SQL INSERT failed: %@", e.localizedDescription);
+    CHECK(e == nil, @"SQL INSERT failed: %@", e.localizedDescription);
     n = [g_client countOfTable:@"objc_sql" error:&e];
-    CHECK(n == 1, "expected count to increase to 1 after INSERT, got %lld", (long long)n);
+    CHECK(n == 1, @"expected count to increase to 1 after INSERT, got %lld", (long long)n);
     (void)body;
 }
 
@@ -367,7 +367,7 @@ static void test_table_names(void) {
     freshTable(@"objc_tables", cols);
     NSError *e = nil;
     NSArray *names = [g_client tableNames:&e];
-    CHECK(e == nil, "table_names failed: %@", e.localizedDescription);
+    CHECK(e == nil, @"table_names failed: %@", e.localizedDescription);
     BOOL found = NO;
     for (NSString *name in names) {
         if ([name isEqualToString:@"objc_tables"]) {
@@ -375,7 +375,7 @@ static void test_table_names(void) {
             break;
         }
     }
-    CHECK(found, "table list missing objc_tables");
+    CHECK(found, @"table list missing objc_tables");
 }
 
 /* 13. schema + schema_for */
@@ -385,8 +385,8 @@ static void test_schema_for(void) {
     freshTable(@"objc_schema", cols);
     NSError *e = nil;
     NSDictionary *body = [g_client schemaForTable:@"objc_schema" error:&e];
-    CHECK(e == nil, "schema_for failed: %@", e.localizedDescription);
-    CHECK(body.count > 0, "expected non-empty schema body");
+    CHECK(e == nil, @"schema_for failed: %@", e.localizedDescription);
+    CHECK(body.count > 0, @"expected non-empty schema body");
 }
 
 /* 14. error not_found */
@@ -395,7 +395,7 @@ static void test_error_not_found(void) {
     NSError *e = nil;
     [g_client schemaForTable:@"objc_does_not_exist_xyz" error:&e];
     CHECK(e != nil && e.code == MongrelDBErrorNotFound,
-          "expected MongrelDBErrorNotFound, got %ld (%@)", (long)(e ? e.code : 0),
+          @"expected MongrelDBErrorNotFound, got %ld (%@)", (long)(e ? e.code : 0),
           e ? e.localizedDescription : @"(nil)");
 }
 
@@ -410,15 +410,15 @@ static void test_idempotency_key(void) {
                       (long long)[[NSDate date] timeIntervalSince1970]];
     NSError *e = nil;
     BOOL ok = [g_client putIntoTable:@"objc_idem" cells:@[i64Cell(1, 1)] idempotencyKey:key error:&e];
-    CHECK(ok && e == nil, "put (first) failed: %@", e.localizedDescription);
+    CHECK(ok && e == nil, @"put (first) failed: %@", e.localizedDescription);
     int64_t n = [g_client countOfTable:@"objc_idem" error:&e];
-    CHECK(n == 1, "expected 1 row, got %lld", (long long)n);
+    CHECK(n == 1, @"expected 1 row, got %lld", (long long)n);
 
     /* Second put with a DIFFERENT value but the SAME key replays the original
      * result; the row count stays at 1. */
     [g_client putIntoTable:@"objc_idem" cells:@[i64Cell(1, 2)] idempotencyKey:key error:&e];
     n = [g_client countOfTable:@"objc_idem" error:&e];
-    CHECK(n == 1, "expected 1 row after duplicate idempotent commit, got %lld", (long long)n);
+    CHECK(n == 1, @"expected 1 row after duplicate idempotent commit, got %lld", (long long)n);
 }
 
 /* ── Main ──────────────────────────────────────────────────────────────── */
