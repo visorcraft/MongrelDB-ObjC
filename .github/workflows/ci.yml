@@ -39,21 +39,16 @@ jobs:
         uses: actions/cache@v6
         with:
           path: bin/mongreldb-server
-          key: mongreldb-server-macos-x64-${{ env.SERVER_VERSION }}
+          key: mongreldb-server-darwin-arm64-${{ env.SERVER_VERSION }}
 
       - name: Download mongreldb-server
         if: steps.server-cache.outputs.cache-hit != 'true'
         run: |
           mkdir -p bin
+          # macos-latest is Apple Silicon (arm64). The release publishes
+          # darwin-arm64 and darwin-universal binaries.
           curl -fsSL -o bin/mongreldb-server \
-            "https://github.com/visorcraft/MongrelDB/releases/download/v${SERVER_VERSION}/mongreldb-server-macos-x64"
-          # Fall back to the linux binary if the macos artifact is missing;
-          # the server is a static binary and runs under macOS via Rosetta on
-          # Apple Silicon runners when needed.
-          if [ ! -s bin/mongreldb-server ]; then
-            curl -fsSL -o bin/mongreldb-server \
-              "https://github.com/visorcraft/MongrelDB/releases/download/v${SERVER_VERSION}/mongreldb-server-linux-x64"
-          fi
+            "https://github.com/visorcraft/MongrelDB/releases/download/v${SERVER_VERSION}/mongreldb-server-darwin-arm64"
           chmod +x bin/mongreldb-server
           ./bin/mongreldb-server --help | head -n 1 || true
 
