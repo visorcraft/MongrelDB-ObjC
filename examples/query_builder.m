@@ -29,7 +29,7 @@ static void printResult(NSString *label, NSArray<NSDictionary *> *rows) {
         for (NSNumber *colId in row) {
             if (!first) { printf(", "); }
             first = NO;
-            printf("col%s=", [[colId stringValue] UTF8String]);
+            printf("col%s=", [[colId description] UTF8String]);
             id v = row[colId];
             if ([v isKindOfClass:[NSString class]]) {
                 printf("%s", [v UTF8String]);
