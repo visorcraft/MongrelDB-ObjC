@@ -295,10 +295,16 @@ const int64_t MongrelDBMaxResponseBytes = 268435456LL; /* 256 MB */
             }
         }
         if (message.length == 0) {
+            message = [[NSString alloc] initWithData:respData encoding:NSUTF8StringEncoding];
+        }
+        if (message.length == 0) {
             message = [NSString stringWithFormat:@"server error (%ld)", (long)status];
         }
         if (error) {
             MongrelDBErrorCode code = MongrelDBErrorCodeForHTTP(status);
+            if ([message hasPrefix:@"not found:"]) {
+                code = MongrelDBErrorNotFound;
+            }
             *error = [self makeError:code message:message];
         }
         return nil;
