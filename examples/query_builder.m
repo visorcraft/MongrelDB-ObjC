@@ -63,6 +63,13 @@ int main(int argc, const char *argv[]) {
         BOOL tableCreated = NO;
         int status = 1;
 
+        /* Forward-declare ARC strong locals so the goto-cleanup pattern below
+         * does not jump over their initialization (forbidden under ARC). */
+        MongrelDBCondition *rangeCond = nil;
+        MongrelDBCondition *pkCond = nil;
+        NSArray *res = nil;
+        NSArray *rows_to_insert = nil;
+
         /* Column schema:
          *   col 1 = id (int64, primary key)
          *   col 2 = name (varchar)
@@ -88,7 +95,7 @@ int main(int argc, const char *argv[]) {
 
         /* Load five rows with varying scores. */
         NSArray *mk(NSString *name, double score); (void)mk;
-        NSArray *rows_to_insert = @[
+        rows_to_insert = @[
             @[ @1, @"Alice", @40.0 ],
             @[ @2, @"Bob",   @65.0 ],
             @[ @3, @"Carol", @82.0 ],
@@ -107,18 +114,18 @@ int main(int argc, const char *argv[]) {
         printf("Inserted 5 rows\n");
 
         /* Range query: 60 <= score <= 90 (both inclusive). */
-        MongrelDBCondition *rangeCond = [[MongrelDBCondition alloc] init];
+        rangeCond = [[MongrelDBCondition alloc] init];
         rangeCond.kind = MongrelDBConditionRange;
         rangeCond.columnId = 3;
         rangeCond.lo = 60.0; rangeCond.loSet = YES;
         rangeCond.hi = 90.0; rangeCond.hiSet = YES;
-        NSArray *res = [db queryTable:table conditions:@[rangeCond] projection:nil
+        res = [db queryTable:table conditions:@[rangeCond] projection:nil
                                  limit:0 truncated:nil error:&e];
         if (e) { fprintf(stderr, "range query failed: %s\n", e.localizedDescription.UTF8String); goto cleanup; }
         printResult(@"range [60, 90] on score", res);
 
         /* Primary-key lookup: id == 4 (Dave). */
-        MongrelDBCondition *pkCond = [[MongrelDBCondition alloc] init];
+        pkCond = [[MongrelDBCondition alloc] init];
         pkCond.kind = MongrelDBConditionPK;
         pkCond.value = @(4);
         res = [db queryTable:table conditions:@[pkCond] projection:nil

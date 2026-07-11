@@ -57,6 +57,11 @@ int main(int argc, const char *argv[]) {
         BOOL tableCreated = NO;
         int status = 1;
 
+        /* Forward-declare ARC strong locals so the goto-cleanup pattern below
+         * does not jump over their initialization (forbidden under ARC). */
+        NSArray *batch1 = nil;
+        NSArray *batch2 = nil;
+
         /* Column schema (enum + default columns). */
         MongrelDBColumn *c1 = [MongrelDBColumn columnWithId:1 name:@"id" type:@"int64"
                                                 primaryKey:YES nullable:NO];
@@ -84,7 +89,7 @@ int main(int argc, const char *argv[]) {
         printf("Created table %s (id %lld)\n", table.UTF8String, (long long)tid);
 
         /* Stage three puts and commit them atomically. */
-        NSArray *batch1 = @[
+        batch1 = @[
             putOp(table, flatRow(@(1), @"Alice", @95.5, @"active")),
             putOp(table, flatRow(@(2), @"Bob",   @82.0, @"inactive")),
             putOp(table, flatRow(@(3), @"Carol", @78.3, @"paused")),
@@ -98,7 +103,7 @@ int main(int argc, const char *argv[]) {
 
         /* Idempotent retry: stage a fourth put and commit twice with the same
          * idempotency key. The second commit is replayed as a no-op. */
-        NSArray *batch2 = @[ putOp(table, flatRow(@(4), @"Dave", @60.0, @"active")) ];
+        batch2 = @[ putOp(table, flatRow(@(4), @"Dave", @60.0, @"active")) ];
         [db transactionWithOps:batch2 idempotencyKey:txnKey error:&e];
         if (e) { fprintf(stderr, "commit (4th put, first) failed: %s\n", e.localizedDescription.UTF8String); goto cleanup; }
         printf("Committed 4th put with idempotency key %s\n", txnKey.UTF8String);

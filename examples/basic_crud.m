@@ -69,6 +69,12 @@ int main(int argc, const char *argv[]) {
         BOOL tableCreated = NO;
         int status = 1;
 
+        /* Forward-declare ARC strong locals so the goto-cleanup pattern below
+         * does not jump over their initialization (forbidden under ARC). */
+        NSArray *mkRow = nil, *mkRow2 = nil, *mkRow3 = nil;
+        NSArray *rows = nil;
+        NSArray *up = nil, *upd = nil;
+
         /* Column schema:
          *   col 1 = id (int64, primary key)
          *   col 2 = name (varchar)
@@ -107,19 +113,19 @@ int main(int argc, const char *argv[]) {
 
         /* 3. Insert three rows. */
         NSArray *row(NSArray *cells); /* forward */
-        NSArray *mkRow = @[
+        mkRow = @[
             [MongrelDBInputCell cellWithColumnId:1 value:@(1)],
             [MongrelDBInputCell cellWithColumnId:2 value:@"Alice"],
             [MongrelDBInputCell cellWithColumnId:3 value:@(95.5)],
             [MongrelDBInputCell cellWithColumnId:4 value:@"active"],
         ];
-        NSArray *mkRow2 = @[
+        mkRow2 = @[
             [MongrelDBInputCell cellWithColumnId:1 value:@(2)],
             [MongrelDBInputCell cellWithColumnId:2 value:@"Bob"],
             [MongrelDBInputCell cellWithColumnId:3 value:@(82.0)],
             [MongrelDBInputCell cellWithColumnId:4 value:@"inactive"],
         ];
-        NSArray *mkRow3 = @[
+        mkRow3 = @[
             [MongrelDBInputCell cellWithColumnId:1 value:@(3)],
             [MongrelDBInputCell cellWithColumnId:2 value:@"Carol"],
             [MongrelDBInputCell cellWithColumnId:3 value:@(78.3)],
@@ -141,20 +147,20 @@ int main(int argc, const char *argv[]) {
 
         /* 5. Query all rows. */
         BOOL trunc = NO;
-        NSArray *rows = [db queryTable:table conditions:nil projection:nil
+        rows = [db queryTable:table conditions:nil projection:nil
                                  limit:0 truncated:&trunc error:&e];
         if (e) { fprintf(stderr, "query failed: %s\n", e.localizedDescription.UTF8String); goto cleanup; }
         printf("Query returned %lu rows:\n", (unsigned long)rows.count);
         printResult(rows);
 
         /* 6. Upsert (update) Alice's score and mark her paused. */
-        NSArray *up = @[
+        up = @[
             [MongrelDBInputCell cellWithColumnId:1 value:@(1)],
             [MongrelDBInputCell cellWithColumnId:2 value:@"Alice"],
             [MongrelDBInputCell cellWithColumnId:3 value:@(100.0)],
             [MongrelDBInputCell cellWithColumnId:4 value:@"paused"],
         ];
-        NSArray *upd = @[
+        upd = @[
             [MongrelDBInputCell cellWithColumnId:2 value:@"Alice"],
             [MongrelDBInputCell cellWithColumnId:3 value:@(100.0)],
             [MongrelDBInputCell cellWithColumnId:4 value:@"paused"],
