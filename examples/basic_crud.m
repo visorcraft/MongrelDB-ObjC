@@ -15,7 +15,7 @@
  * Progress is printed at every step.
  *
  * The "status" column is an enum ("active" | "inactive" | "paused") with a
- * default of "active"; the "score" column has a numeric default of "0.0".
+ * default of "active"; the "score" column has a numeric default of 0.0.
  * These are emitted as "enum_variants" and "default_value" keys in the
  * /kit/create_table wire JSON.
  */
@@ -78,7 +78,7 @@ int main(int argc, const char *argv[]) {
         /* Column schema:
          *   col 1 = id (int64, primary key)
          *   col 2 = name (varchar)
-         *   col 3 = score (float64, default "0.0")
+         *   col 3 = score (float64, default 0.0)
          *   col 4 = status (varchar, enum ["active","inactive","paused"], default "active")
          */
         NSArray *statusVariants = @[@"active", @"inactive", @"paused"];
@@ -88,7 +88,7 @@ int main(int argc, const char *argv[]) {
                                                 primaryKey:NO nullable:NO];
         MongrelDBColumn *c3 = [[MongrelDBColumn alloc] init];
         c3.columnId = 3; c3.name = @"score"; c3.type = @"float64";
-        c3.primaryKey = NO; c3.nullable = NO; c3.defaultValue = @"0.0";
+        c3.primaryKey = NO; c3.nullable = NO; c3.defaultValue = @0.0;
         MongrelDBColumn *c4 = [[MongrelDBColumn alloc] init];
         c4.columnId = 4; c4.name = @"status"; c4.type = @"varchar";
         c4.primaryKey = NO; c4.nullable = NO;
