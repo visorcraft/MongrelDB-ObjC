@@ -167,13 +167,21 @@ existing schemas are unaffected.
 MongrelDBColumn *statusCol = [[MongrelDBColumn alloc] init];
 statusCol.columnId = 3;
 statusCol.name = @"status";
-statusCol.type = @"varchar";
+statusCol.type = @"enum";
 statusCol.primaryKey = NO;
 statusCol.nullable = NO;
 /* Wire emit: "enum_variants": ["active","inactive","paused"] */
 statusCol.enumVariants = @[@"active", @"inactive", @"paused"];
-/* Wire emit: "default_value": "active" */
-statusCol.defaultValue = @"active";
+MongrelDBColumn *createdAt = [MongrelDBColumn columnWithId:4
+    name:@"created_at" type:@"timestamp_nanos" primaryKey:NO nullable:NO];
+createdAt.defaultValue = @"now";
+
+NSDictionary *constraints = @{
+    @"checks": @[@{@"id": @1, @"name": @"id_present",
+                     @"expr": @{@"IsNotNull": @1}}],
+};
+[db createTableWithName:@"orders" columns:@[statusCol, createdAt]
+            constraints:constraints error:&e];
 ```
 
 `enumVariants` is an `NSArray<NSString *> *`; nil means "absent". `defaultValue`

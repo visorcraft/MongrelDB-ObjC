@@ -335,6 +335,13 @@ const int64_t MongrelDBMaxResponseBytes = 268435456LL; /* 256 MB */
 - (int64_t)createTableWithName:(NSString *)name
                        columns:(NSArray<MongrelDBColumn *> *)columns
                          error:(NSError *_Nullable *_Nullable)error {
+    return [self createTableWithName:name columns:columns constraints:nil error:error];
+}
+
+- (int64_t)createTableWithName:(NSString *)name
+                       columns:(NSArray<MongrelDBColumn *> *)columns
+                   constraints:(nullable NSDictionary<NSString *, id> *)constraints
+                         error:(NSError *_Nullable *_Nullable)error {
     NSMutableArray<NSDictionary *> *cols = [NSMutableArray arrayWithCapacity:columns.count];
     for (MongrelDBColumn *c in columns) {
         NSMutableDictionary *d = [NSMutableDictionary dictionary];
@@ -347,7 +354,8 @@ const int64_t MongrelDBMaxResponseBytes = 268435456LL; /* 256 MB */
         if (c.defaultValue) { d[@"default_value"] = c.defaultValue; }
         [cols addObject:d];
     }
-    NSDictionary *body = @{@"name": name ?: @"", @"columns": cols};
+    NSMutableDictionary *body = [@{@"name": name ?: @"", @"columns": cols} mutableCopy];
+    if (constraints) { body[@"constraints"] = constraints; }
     id r = [self requestMethod:@"POST" path:@"kit/create_table" body:body error:error];
     if ([r isKindOfClass:[NSDictionary class]]) {
         NSNumber *tid = [(NSDictionary *)r objectForKey:@"table_id"];

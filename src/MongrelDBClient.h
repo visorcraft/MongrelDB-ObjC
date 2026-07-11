@@ -138,6 +138,12 @@ typedef NS_ENUM(NSInteger, MongrelDBConditionKind) {
                        columns:(NSArray<MongrelDBColumn *> *)columns
                          error:(NSError *_Nullable *_Nullable)error;
 
+/* Same request with a top-level engine constraints object. */
+- (int64_t)createTableWithName:(NSString *)name
+                       columns:(NSArray<MongrelDBColumn *> *)columns
+                   constraints:(nullable NSDictionary<NSString *, id> *)constraints
+                         error:(NSError *_Nullable *_Nullable)error;
+
 /* DELETE /tables/{name}. */
 - (BOOL)dropTableWithName:(NSString *)name
                     error:(NSError *_Nullable *_Nullable)error;

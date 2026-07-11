@@ -48,6 +48,30 @@ static NSString *sortedJSON(id obj) {
     return [[NSString alloc] initWithData:d encoding:NSUTF8StringEncoding];
 }
 
+@interface MongrelDBClient (WireShapeTest)
+- (nullable id)requestMethod:(NSString *)method
+                        path:(NSString *)path
+                        body:(nullable NSDictionary *)body
+                       error:(NSError *_Nullable *_Nullable)error;
+@end
+
+@interface CapturingClient : MongrelDBClient
+@property (nonatomic, strong) NSDictionary *capturedBody;
+@end
+
+@implementation CapturingClient
+- (nullable id)requestMethod:(NSString *)method
+                        path:(NSString *)path
+                        body:(nullable NSDictionary *)body
+                       error:(NSError *_Nullable *_Nullable)error {
+    (void)method;
+    (void)path;
+    (void)error;
+    self.capturedBody = body;
+    return @{@"table_id": @42};
+}
+@end
+
 /* The create_table body must carry name, columns[] with id/name/ty/primary_key/
  * nullable, plus optional enum_variants and default_value when set. */
 static void test_create_table_body(void) {
@@ -56,32 +80,38 @@ static void test_create_table_body(void) {
     MongrelDBColumn *c2 = [[MongrelDBColumn alloc] init];
     c2.columnId = 4;
     c2.name = @"status";
-    c2.type = @"varchar";
+    c2.type = @"enum";
     c2.primaryKey = NO;
     c2.nullable = NO;
     c2.enumVariants = @[@"active", @"inactive", @"paused"];
-    c2.defaultValue = @"active";
 
-    /* Build the same body MongrelDBClient would send, via the client's own
-     * serialization logic by reconstructing the expected structure. */
-    NSDictionary *body = @{
-        @"name": @"orders",
-        @"columns": @[
-            @{@"id": @(1), @"name": @"id", @"ty": @"int64",
-              @"primary_key": @YES, @"nullable": @NO},
-            @{@"id": @(4), @"name": @"status", @"ty": @"varchar",
-              @"primary_key": @NO, @"nullable": @NO,
-              @"enum_variants": @[@"active", @"inactive", @"paused"],
-              @"default_value": @"active"},
-        ],
+    MongrelDBColumn *c3 = [MongrelDBColumn columnWithId:5 name:@"created_at"
+                                                   type:@"timestamp_nanos"
+                                             primaryKey:NO nullable:NO];
+    c3.defaultValue = @"now";
+    NSDictionary *constraints = @{
+        @"checks": @[@{@"id": @1, @"name": @"id_present",
+                         @"expr": @{@"IsNotNull": @1}}],
     };
+    CapturingClient *client = [[CapturingClient alloc] init];
+    NSError *error = nil;
+    int64_t tableId = [client createTableWithName:@"orders"
+                                          columns:@[c1, c2, c3]
+                                      constraints:constraints
+                                            error:&error];
+    CHECK(error == nil, "createTable returned an error");
+    CHECK(tableId == 42, "createTable did not return captured table id");
+
+    NSDictionary *body = client.capturedBody;
     NSString *json = sortedJSON(body);
     CHECK([json containsString:@"\"name\":\"orders\""], "body missing table name");
     CHECK([json containsString:@"\"ty\":\"int64\""], "body missing column type");
     CHECK([json containsString:@"\"primary_key\":true"], "body missing primary_key");
     CHECK([json containsString:@"\"enum_variants\""], "body missing enum_variants");
-    CHECK([json containsString:@"\"default_value\":\"active\""], "body missing default_value");
-    (void)c1;
+    CHECK([json containsString:@"\"default_value\":\"now\""], "body missing default_value");
+    CHECK([json containsString:@"\"constraints\""], "body missing constraints");
+    CHECK([json containsString:@"\"checks\""], "body missing constraints.checks");
+    CHECK([json containsString:@"\"IsNotNull\":1"], "body missing check expression");
 }
 
 /* The batch txn body must wrap ops in {"ops":[...]} and carry an idempotency
