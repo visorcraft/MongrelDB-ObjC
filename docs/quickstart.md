@@ -35,7 +35,7 @@ Fetch a prebuilt server binary from the
 ```sh
 mkdir -p bin
 curl -fsSL -o bin/mongreldb-server \
-  https://github.com/visorcraft/MongrelDB/releases/download/v0.46.2/mongreldb-server-macos-x64
+  https://github.com/visorcraft/MongrelDB/releases/download/v0.48.0/mongreldb-server-macos-x64
 chmod +x bin/mongreldb-server
 ```
 
