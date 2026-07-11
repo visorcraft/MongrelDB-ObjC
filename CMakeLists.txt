@@ -26,6 +26,11 @@ add_library(mongreldb_objc SHARED
     src/MongrelDBClient.m
     src/MongrelDBError.m
 )
+# The source is written for ARC (strong/copy properties, no explicit
+# retain/release/autorelease). Enable it explicitly so object lifetimes are
+# correct -- without ARC, autoreleased results from convenience constructors
+# are freed when the autorelease pool drains, leaving dangling pointers.
+target_compile_options(mongreldb_objc PRIVATE -fobjc-arc)
 target_include_directories(mongreldb_objc
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
@@ -43,6 +48,7 @@ if(MONGRELDB_OBJC_BUILD_TESTS)
     enable_testing()
     add_executable(test_mongreldb tests/test_mongreldb.m)
     target_link_libraries(test_mongreldb PRIVATE mongreldb_objc)
+    target_compile_options(test_mongreldb PRIVATE -fobjc-arc)
     if(APPLE)
         target_link_libraries(test_mongreldb PRIVATE ${FOUNDATION})
     endif()
@@ -53,6 +59,7 @@ if(MONGRELDB_OBJC_BUILD_TESTS)
     # keys/shape the server expects.
     add_executable(test_wire_shape tests/test_wire_shape.m)
     target_link_libraries(test_wire_shape PRIVATE mongreldb_objc)
+    target_compile_options(test_wire_shape PRIVATE -fobjc-arc)
     if(APPLE)
         target_link_libraries(test_wire_shape PRIVATE ${FOUNDATION})
     endif()
