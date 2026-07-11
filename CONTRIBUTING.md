@@ -77,8 +77,9 @@ Live tests self-skip when no server is reachable.
   only runtime dependency. Do not pull in a third-party HTTP or JSON library.
 - **Memory model.** Under ARC. Result arrays are plain NSArray objects the
   caller owns; the client object itself is released normally.
-- **Thread safety.** MongrelDBClient is safe to use from one thread; if you
-  need concurrent access, serialize externally or use one client per thread.
+- **Thread safety.** MongrelDBClient is thread-safe: requests serialize through
+  a single NSURLSession delegate queue and mutable state is guarded by a lock.
+  For high concurrency prefer one client per logical user.
 - **Errors.** Methods take `NSError **` out-parameters. Build errors via the
   internal helper. Never leak memory on an error path.
 - **Naming.** Standard Objective-C naming conventions: camelCase selectors,

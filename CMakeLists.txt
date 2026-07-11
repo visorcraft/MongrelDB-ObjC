@@ -15,10 +15,8 @@ option(MONGRELDB_OBJC_BUILD_TESTS "Build the MongrelDB ObjC client tests" ON)
 # Foundation. On non-Apple platforms (Linux) this would need GNUstep; CI runs on
 # macOS so we link against the system frameworks.
 if(APPLE)
-    find_library(APPKIT AppKit)
     find_library(FOUNDATION Foundation)
 else()
-    set(APPKIT "")
     set(FOUNDATION "")
 endif()
 

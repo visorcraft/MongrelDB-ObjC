@@ -211,7 +211,8 @@ typedef NS_ENUM(NSInteger, MongrelDBConditionKind) {
 /* POST /kit/query. conditions (or nil) are AND-ed; projection (or nil)
  * restricts returned column ids; limit (or 0) caps the count. truncated is set
  * to YES when the result hit the limit. Returns the rows array; each row is an
- * NSDictionary mapping column-id (NSNumber) -> value. */
+ * NSDictionary mapping column-id (NSNumber) -> value. Every row also contains
+ * an @"row_id" entry with the engine-assigned row id. */
 - (nullable NSArray<NSDictionary *> *)queryTable:(NSString *)table
                                       conditions:(nullable NSArray<MongrelDBCondition *> *)conditions
                                       projection:(nullable NSArray<NSNumber *> *)projection

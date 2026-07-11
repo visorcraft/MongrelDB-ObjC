@@ -638,7 +638,7 @@ willPerformHTTPRedirection:(NSHTTPURLResponse *)response
     NSDictionary *row = (NSDictionary *)raw;
     id cells = [row objectForKey:@"cells"];
     if (![cells isKindOfClass:[NSArray class]]) {
-        return row;
+        return @{};
     }
     NSArray *flat = (NSArray *)cells;
     NSMutableDictionary *out = [NSMutableDictionary dictionary];

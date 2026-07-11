@@ -24,7 +24,7 @@
 
 ## Requirements
 
-- **A Objective-C compiler** (clang, Apple LLVM) on macOS
+- **An Objective-C compiler** (clang, Apple LLVM) on macOS
 - **Apple Foundation** (NSURLSession, NSJSONSerialization) - ships with macOS/iOS
 - **CMake 3.16 or newer** (to build)
 - A running [`mongreldb-server`](https://github.com/visorcraft/MongrelDB) daemon
@@ -180,7 +180,7 @@ statusCol.primaryKey = NO;
 statusCol.isNullable = NO;
 /* Wire emit: "enum_variants": ["active","inactive","paused"] */
 statusCol.enumVariants = @[@"active", @"inactive", @"paused"];
-statusCol.defaultValueJSON = @"active"; /* must be one of the enum variants */
+statusCol.defaultValue = @"active"; /* must be one of the enum variants */
 MongrelDBColumn *createdAt = [MongrelDBColumn columnWithId:4
     name:@"created_at" type:@"timestamp_nanos" primaryKey:NO isNullable:NO];
 createdAt.defaultExpression = @"now";
