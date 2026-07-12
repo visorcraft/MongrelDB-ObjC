@@ -88,11 +88,20 @@ const int64_t MongrelDBMaxResponseBytes = 268435456LL; /* 256 MB */
 
 /* ── Lifecycle ─────────────────────────────────────────────────────────── */
 
+/* Convenience init override. Required because initWithURL:token:username:password:error:
+ * is the designated initializer: NSObject's own -init is designated in the
+ * superclass, so the subclass must override it and chain to its own designated
+ * initializer. Subclasses of MongrelDBClient that override init must similarly
+ * chain to initWithURL:token:username:password:error:. */
+- (instancetype)init {
+    return [self initWithURL:nil token:nil username:nil password:nil error:nil];
+}
+
 - (nullable instancetype)initWithURL:(NSString *)url
-                               token:(nullable NSString *)token
-                            username:(nullable NSString *)username
-                            password:(nullable NSString *)password
-                               error:(NSError *_Nullable *_Nullable)error {
+                                token:(nullable NSString *)token
+                             username:(nullable NSString *)username
+                             password:(nullable NSString *)password
+                                error:(NSError *_Nullable *_Nullable)error {
     self = [super init];
     if (!self) {
         return nil;
