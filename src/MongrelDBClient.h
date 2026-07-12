@@ -134,6 +134,18 @@ typedef NS_ENUM(NSInteger, MongrelDBConditionKind) {
                                password:(nullable NSString *)password
                                   error:(NSError *_Nullable *_Nullable)error;
 
+/* Designated initializer. Prefer the connectWithURL: convenience constructors
+ * unless you need to subclass MongrelDBClient. Any subclass that overrides
+ * init must chain to this via [super initWithURL:token:username:password:error:].
+ * Pass nil/empty url to use MongrelDBDefaultURL; pass nil credentials for open
+ * mode, a token for bearer mode, or username/password for HTTP Basic. */
+- (nullable instancetype)initWithURL:(nullable NSString *)url
+                               token:(nullable NSString *)token
+                            username:(nullable NSString *)username
+                            password:(nullable NSString *)password
+                               error:(NSError *_Nullable *_Nullable)error
+NS_DESIGNATED_INITIALIZER;
+
 /* Per-request timeout in seconds (default 30). */
 - (void)setTimeout:(NSTimeInterval)seconds;
 
