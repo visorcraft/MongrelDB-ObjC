@@ -116,6 +116,11 @@ typedef NS_ENUM(NSInteger, MongrelDBConditionKind) {
 /* The daemon base URL this client targets (no trailing slash). */
 @property (nonatomic, readonly, copy) NSString *baseURL;
 
+/* Epoch of the most recent successful /kit/txn commit captured from the
+ * daemon response. Updated only when the response status is "committed" and
+ * an epoch is present; 0 if no commit has been observed yet. */
+@property (nonatomic, assign) uint64_t lastEpoch;
+
 /* Open mode: no credentials. Pass nil or empty url to use MongrelDBDefaultURL. */
 + (nullable instancetype)connectWithURL:(nullable NSString *)url
                                   error:(NSError *_Nullable *_Nullable)error;

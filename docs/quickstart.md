@@ -94,11 +94,15 @@ int main(void) {
             return 1;
         }
 
-        /* 3. Create a table. Two optional fields extend the schema:
+        /* 3. Create a table. Optional schema fields:
          *    - enumVariants: a fixed set of allowed values for a text column
          *      (server-enforced on commit).
-         *    - defaultValue: a string applied when a row omits the column.
-         *    Both are nil = absent and are dropped from the wire JSON when not
+         *    - defaultValue: a legacy string default.
+         *    - defaultValueJSON: a typed JSON scalar default (NSString, NSNumber,
+         *      NSNull, @YES/@NO). Use this for literal strings such as "now" or
+         *      "uuid"; defaultExpression would make those dynamic instead.
+         *    - defaultExpression: dynamic default, only "now" or "uuid".
+         *    All are nil = absent and are dropped from the wire JSON when not
          *    set, so the existing positional form stays valid. */
         MongrelDBColumn *c4 = [[MongrelDBColumn alloc] init];
         c4.columnId = 4; c4.name = @"status"; c4.type = @"enum";
@@ -164,8 +168,42 @@ You should see the row count of 1.
 | `limit:100` | Caps the result; check the `truncated` out-param afterward. |
 | `countOfTable:error:` | GET `/tables/{name}/count`. |
 | `setHistoryRetentionEpochs:error:` | PUT `/history/retention`; controls time-travel query depth. |
+| `lastEpoch` | Epoch of the most recent successful `/kit/txn` commit; use with `AS OF EPOCH`. |
 
-## 6. Common pitfalls
+## 6. History retention and time travel
+
+`setHistoryRetentionEpochs:error:` sets how many epochs of history the daemon
+keeps. Every successful batch commit updates the client's `lastEpoch` property
+with the epoch assigned by the server.
+
+```objc
+NSError *e = nil;
+[db setHistoryRetentionEpochs:1000 error:&e];
+
+/* Insert a row. */
+[db putIntoTable:@"orders"
+            cells:@[[MongrelDBInputCell cellWithColumnId:1 value:@1],
+                    [MongrelDBInputCell cellWithColumnId:2 value:@"Alice"]]
+   idempotencyKey:nil error:&e];
+uint64_t epoch = db.lastEpoch;
+
+/* Update it later. */
+[db putIntoTable:@"orders"
+            cells:@[[MongrelDBInputCell cellWithColumnId:1 value:@1],
+                    [MongrelDBInputCell cellWithColumnId:2 value:@"Alicia"]]
+   idempotencyKey:nil error:&e];
+
+/* Read the row as it existed right after the first commit. */
+NSString *sql = [NSString stringWithFormat:
+    @"SELECT customer FROM orders AS OF EPOCH %llu WHERE id = 1",
+    (unsigned long long)epoch];
+NSArray *rows = [db sql:sql error:&e];
+```
+
+Raising the window prevents older epochs from being garbage collected, but it
+cannot bring back epochs that have already been pruned.
+
+## 7. Common pitfalls
 
 **Using the column name instead of the column id.** Every on-wire API uses the
 numeric `columnId` from `createTableWithName:`, never the `name`. Conditions

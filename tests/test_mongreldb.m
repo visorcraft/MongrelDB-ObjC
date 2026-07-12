@@ -449,6 +449,111 @@ static void test_history_retention(void) {
     [g_client setHistoryRetentionEpochs:original error:&e];
 }
 
+/* Helper: extract an int64 from the first row of a SQL JSON result. */
+static int64_t firstIntColumn(id result, NSString *column) {
+    if (![result isKindOfClass:[NSArray class]] || [(NSArray *)result count] == 0) {
+        return INT64_MIN;
+    }
+    id row = [(NSArray *)result objectAtIndex:0];
+    if (![row isKindOfClass:[NSDictionary class]]) {
+        return INT64_MIN;
+    }
+    id v = [(NSDictionary *)row objectForKey:column];
+    if ([v isKindOfClass:[NSNumber class]]) {
+        return [(NSNumber *)v longLongValue];
+    }
+    return INT64_MIN;
+}
+
+/* 17. history retention round-trip with AS OF EPOCH */
+static void test_history_retention_round_trip(void) {
+    SKIP_IF_NO_DAEMON();
+    NSArray *cols = @[intCol(1, @"id", YES), intCol(2, @"v", NO)];
+    freshTable(@"objc_retention", cols);
+
+    NSError *e = nil;
+    uint64_t original = [g_client historyRetentionEpochs:&e];
+    CHECK(e == nil, @"historyRetentionEpochs failed: %@", e.localizedDescription);
+    [g_client setHistoryRetentionEpochs:1000 error:&e];
+    CHECK(e == nil, @"setHistoryRetentionEpochs failed: %@", e.localizedDescription);
+
+    uint64_t epochs = [g_client historyRetentionEpochs:&e];
+    CHECK(e == nil, @"historyRetentionEpochs getter failed: %@", e.localizedDescription);
+    CHECK(epochs == 1000, @"historyRetentionEpochs getter did not reflect the set window");
+
+    uint64_t earliest = [g_client earliestRetainedEpoch:&e];
+    CHECK(e == nil, @"earliestRetainedEpoch getter failed: %@", e.localizedDescription);
+    CHECK(earliest <= 1000, @"earliestRetainedEpoch getter returned an invalid epoch");
+
+    /* Insert the first version of the row. */
+    BOOL ok = [g_client putIntoTable:@"objc_retention"
+                                cells:@[i64Cell(1, 1), i64Cell(2, 100)]
+                       idempotencyKey:nil error:&e];
+    CHECK(ok && e == nil, @"put failed: %@", e.localizedDescription);
+    uint64_t epoch1 = g_client.lastEpoch;
+    CHECK(epoch1 > 0, @"lastEpoch was not captured from the commit response");
+
+    /* Update the row; lastEpoch should advance. */
+    ok = [g_client putIntoTable:@"objc_retention"
+                           cells:@[i64Cell(1, 1), i64Cell(2, 200)]
+                  idempotencyKey:nil error:&e];
+    CHECK(ok && e == nil, @"update put failed: %@", e.localizedDescription);
+    uint64_t epoch2 = g_client.lastEpoch;
+    CHECK(epoch2 > epoch1, @"lastEpoch did not advance on second commit");
+
+    /* Current value should be the second version. */
+    id current = [g_client sql:@"SELECT v FROM objc_retention WHERE id = 1" error:&e];
+    CHECK(e == nil, @"current select failed: %@", e.localizedDescription);
+    CHECK(firstIntColumn(current, @"v") == 200, @"current value should be 200");
+
+    /* Time-travel read at the first epoch should see the first version. */
+    NSString *asOf = [NSString stringWithFormat:@"SELECT v FROM objc_retention AS OF EPOCH %llu WHERE id = 1",
+                      (unsigned long long)epoch1];
+    id historical = [g_client sql:asOf error:&e];
+    CHECK(e == nil, @"AS OF EPOCH select failed: %@", e.localizedDescription);
+    CHECK(firstIntColumn(historical, @"v") == 100, @"historical value should be 100");
+
+    /* Restore the original window. */
+    [g_client setHistoryRetentionEpochs:original error:&e];
+}
+
+/* 18. explicit AS OF EPOCH time-travel using lastEpoch */
+static void test_as_of_epoch_time_travel(void) {
+    SKIP_IF_NO_DAEMON();
+    NSArray *cols = @[intCol(1, @"id", YES), varcharCol(2, @"label")];
+    freshTable(@"objc_time_travel", cols);
+
+    NSError *e = nil;
+    uint64_t original = [g_client historyRetentionEpochs:&e];
+    CHECK(e == nil, @"historyRetentionEpochs failed: %@", e.localizedDescription);
+    [g_client setHistoryRetentionEpochs:1000 error:&e];
+    CHECK(e == nil, @"setHistoryRetentionEpochs failed: %@", e.localizedDescription);
+
+    BOOL ok = [g_client putIntoTable:@"objc_time_travel"
+                                cells:@[i64Cell(1, 1), strCell(2, @"first")]
+                       idempotencyKey:nil error:&e];
+    CHECK(ok && e == nil, @"put failed: %@", e.localizedDescription);
+    uint64_t epoch1 = g_client.lastEpoch;
+    CHECK(epoch1 > 0, @"lastEpoch was not captured");
+
+    ok = [g_client putIntoTable:@"objc_time_travel"
+                           cells:@[i64Cell(1, 1), strCell(2, @"second")]
+                  idempotencyKey:nil error:&e];
+    CHECK(ok && e == nil, @"second put failed: %@", e.localizedDescription);
+
+    NSString *asOf = [NSString stringWithFormat:@"SELECT label FROM objc_time_travel AS OF EPOCH %llu WHERE id = 1",
+                      (unsigned long long)epoch1];
+    id historical = [g_client sql:asOf error:&e];
+    CHECK(e == nil, @"AS OF EPOCH select failed: %@", e.localizedDescription);
+    CHECK([historical isKindOfClass:[NSArray class]], @"historical result should be an array");
+    CHECK([(NSArray *)historical count] == 1, @"expected one historical row");
+    id label = [[(NSArray *)historical objectAtIndex:0] objectForKey:@"label"];
+    CHECK([label isKindOfClass:[NSString class]] && [label isEqualToString:@"first"],
+          @"historical label should be 'first', got %@", label);
+
+    [g_client setHistoryRetentionEpochs:original error:&e];
+}
+
 /* ── Main ──────────────────────────────────────────────────────────────── */
 
 int main(int argc, const char *argv[]) {
@@ -473,6 +578,8 @@ int main(int argc, const char *argv[]) {
         RUN(test_error_not_found);
         RUN(test_idempotency_key);
         RUN(test_history_retention);
+        RUN(test_history_retention_round_trip);
+        RUN(test_as_of_epoch_time_travel);
 
         printf("\n%d passed, %d failed, %d skipped\n", g_pass, g_fail, g_skip);
         return g_fail > 0 ? 1 : 0;

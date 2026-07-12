@@ -167,9 +167,9 @@ if (trunc) {
 
 ## Schema constraints
 
-Two optional fields on `MongrelDBColumn` let you constrain what goes into a
-column at create time. Both are omitted from the wire JSON when left nil, so
-existing schemas are unaffected.
+Three optional fields on `MongrelDBColumn` let you set defaults and constrain
+what goes into a column at create time. All are omitted from the wire JSON when
+left nil, so existing schemas are unaffected.
 
 ```objc
 MongrelDBColumn *statusCol = [[MongrelDBColumn alloc] init];
@@ -183,20 +183,32 @@ statusCol.enumVariants = @[@"active", @"inactive", @"paused"];
 statusCol.defaultValue = @"active"; /* must be one of the enum variants */
 MongrelDBColumn *createdAt = [MongrelDBColumn columnWithId:4
     name:@"created_at" type:@"timestamp_nanos" primaryKey:NO isNullable:NO];
-createdAt.defaultExpression = @"now";
+createdAt.defaultExpression = @"now"; /* dynamic default evaluated on insert */
+
+MongrelDBColumn *literalNow = [MongrelDBColumn columnWithId:5
+    name:@"literal_now" type:@"varchar" primaryKey:NO isNullable:NO];
+literalNow.defaultValueJSON = @"now"; /* literal static string, not dynamic */
+
+MongrelDBColumn *literalUuid = [MongrelDBColumn columnWithId:6
+    name:@"literal_uuid" type:@"varchar" primaryKey:NO isNullable:NO];
+literalUuid.defaultValueJSON = @"uuid"; /* literal static string */
 
 NSDictionary *constraints = @{
     @"checks": @[@{@"id": @1, @"name": @"id_present",
                      @"expr": @{@"IsNotNull": @1}}],
 };
-[db createTableWithName:@"orders" columns:@[statusCol, createdAt]
+[db createTableWithName:@"orders" columns:@[statusCol, createdAt, literalNow, literalUuid]
             constraints:constraints error:&e];
 ```
 
 `enumVariants` is an `NSArray<NSString *> *`; nil means "absent". `defaultValue`
-is a single string constant; nil means "absent". The constraint is enforced
-server-side, so a row whose value falls outside the listed variants surfaces
-as `MongrelDBErrorConflict` on `putIntoTable:` / `transactionWithOps:`.
+is a legacy string constant; `defaultValueJSON` is a typed JSON scalar
+(`NSString`, `NSNumber`, `NSNull`, or `@YES`/`@NO`). `defaultExpression` is the
+only dynamic discriminator and accepts `"now"` or `"uuid"`. If you need the
+literal strings `"now"` or `"uuid"` as static defaults, set them through
+`defaultValueJSON`; using `defaultExpression` makes them dynamic. The constraint
+is enforced server-side, so a row whose value falls outside the listed variants
+surfaces as `MongrelDBErrorConflict` on `putIntoTable:` / `transactionWithOps:`.
 
 ## SQL
 
@@ -247,13 +259,14 @@ if (e) {
 
 ### Client lifecycle
 
-| Method | Description |
-|--------|-------------|
+| Method / Property | Description |
+|-------------------|-------------|
 | `connectWithURL:error:` | Construct a client (nil url defaults to `http://127.0.0.1:8453`) |
 | `connectWithURL:token:error:` | Bearer token auth (`--auth-token` mode) |
 | `connectWithURL:username:password:error:` | HTTP Basic auth (`--auth-users` mode) |
 | `setTimeout:` | Per-request timeout (default 30) |
 | `lastError` | Message for the most recent failure |
+| `lastEpoch` | Epoch of the most recent successful `/kit/txn` commit (read/write) |
 
 ### Database operations
 
@@ -292,7 +305,17 @@ NSLog(@"earliest: %llu", [result[@"earliest_retained_epoch"] unsignedLongLongVal
 NSLog(@"window: %llu", [db historyRetentionEpochs:&e]);
 NSLog(@"earliest: %llu", [db earliestRetainedEpoch:&e]);
 
-NSArray *rows = [db sql:@"SELECT customer FROM orders AS OF EPOCH 42 WHERE id = 1" error:&e];
+/* Each successful batch commit updates db.lastEpoch. */
+NSArray *ops = @[
+    @{@"put": @{@"table": @"orders", @"cells": @[@1, @99, @2, @"Alice"], @"returning": @NO}},
+];
+[db transactionWithOps:ops idempotencyKey:nil error:&e];
+uint64_t committedEpoch = db.lastEpoch;
+
+/* Read the row as it existed right after that commit. */
+NSString *sql = [NSString stringWithFormat:@"SELECT customer FROM orders AS OF EPOCH %llu WHERE id = 1",
+                 (unsigned long long)committedEpoch];
+NSArray *rows = [db sql:sql error:&e];
 ```
 
 Raising retention prevents history from being garbage collected, but it cannot

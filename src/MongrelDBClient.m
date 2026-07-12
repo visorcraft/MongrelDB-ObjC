@@ -126,6 +126,7 @@ const int64_t MongrelDBMaxResponseBytes = 268435456LL; /* 256 MB */
     _username = [username copy];
     _password = [password copy];
     _timeout = 30.0;
+    _lastEpoch = 0;
     _errorLock = [[NSLock alloc] init];
     _lastErrorStr = @"";
 
@@ -527,9 +528,22 @@ willPerformHTTPRedirection:(NSHTTPURLResponse *)response
         body[@"idempotency_key"] = idempotencyKey;
     }
     id r = [self requestMethod:@"POST" path:@"kit/txn" body:body error:error];
+    if (!r) {
+        return nil;
+    }
     if ([r isKindOfClass:[NSDictionary class]]) {
-        id results = [(NSDictionary *)r objectForKey:@"results"];
+        NSDictionary *resp = (NSDictionary *)r;
+        id results = [resp objectForKey:@"results"];
         if ([results isKindOfClass:[NSArray class]]) {
+            /* Capture the commit epoch whenever the server reports one. */
+            id status = [resp objectForKey:@"status"];
+            id epoch = [resp objectForKey:@"epoch"];
+            if ([status isKindOfClass:[NSString class]] &&
+                [status isEqualToString:@"committed"] &&
+                [epoch isKindOfClass:[NSNumber class]]) {
+                unsigned long long epochValue = [(NSNumber *)epoch unsignedLongLongValue];
+                self.lastEpoch = (uint64_t)epochValue;
+            }
             return (NSArray<NSDictionary *> *)results;
         }
     }

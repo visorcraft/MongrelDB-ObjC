@@ -82,6 +82,67 @@ static NSString *sortedJSON(id obj) {
 }
 @end
 
+/* Subclass that returns a canned /history/retention response or an error so we
+ * can assert the exact method/path/keys and error propagation without a daemon. */
+@interface HistoryWireClient : MongrelDBClient
+@property (nonatomic, copy) NSString *lastMethod;
+@property (nonatomic, copy) NSString *lastPath;
+@property (nonatomic, strong) NSDictionary *capturedBody;
+@property (nonatomic, assign) BOOL failNext;
+@end
+
+@implementation HistoryWireClient
+- (instancetype)init {
+    NSError *error = nil;
+    self = [super initWithURL:@"http://127.0.0.1:8453"
+                        token:nil
+                     username:nil
+                     password:nil
+                        error:&error];
+    (void)error;
+    return self;
+}
+- (nullable id)requestMethod:(NSString *)method
+                        path:(NSString *)path
+                        body:(nullable NSDictionary *)body
+                       error:(NSError *_Nullable *_Nullable)error {
+    self.lastMethod = [method copy];
+    self.lastPath = [path copy];
+    self.capturedBody = body;
+    if (self.failNext) {
+        if (error) {
+            *error = [NSError errorWithDomain:MongrelDBErrorDomain
+                                         code:MongrelDBErrorAuth
+                                     userInfo:@{NSLocalizedDescriptionKey: @"forced error"}];
+        }
+        return nil;
+    }
+    if ([path isEqualToString:@"history/retention"]) {
+        return @{@"history_retention_epochs": @7,
+                 @"earliest_retained_epoch": @3};
+    }
+    return @{@"table_id": @42};
+}
+@end
+
+/* Find a column dictionary in a create_table body by its numeric id. */
+static NSDictionary *columnById(NSDictionary *body, int64_t colId) {
+    NSArray *cols = body[@"columns"];
+    if (![cols isKindOfClass:[NSArray class]]) {
+        return nil;
+    }
+    for (NSDictionary *c in cols) {
+        if (![c isKindOfClass:[NSDictionary class]]) {
+            continue;
+        }
+        id idObj = c[@"id"];
+        if ([idObj isKindOfClass:[NSNumber class]] && [idObj longLongValue] == colId) {
+            return c;
+        }
+    }
+    return nil;
+}
+
 /* The create_table body must carry name, columns[] with id/name/ty/primary_key/
  * nullable, plus optional enum_variants and default_value when set. */
 static void test_create_table_body(void) {
@@ -108,6 +169,10 @@ static void test_create_table_body(void) {
     MongrelDBColumn *c5 = [MongrelDBColumn columnWithId:7 name:@"s" type:@"varchar" primaryKey:NO isNullable:NO]; c5.defaultValueJSON = @"draft";
     MongrelDBColumn *c6 = [MongrelDBColumn columnWithId:8 name:@"b" type:@"bool" primaryKey:NO isNullable:NO]; c6.defaultValueJSON = @YES;
     MongrelDBColumn *c7 = [MongrelDBColumn columnWithId:9 name:@"n" type:@"varchar" primaryKey:NO isNullable:YES]; c7.defaultValueJSON = NSNull.null;
+    MongrelDBColumn *c8 = [MongrelDBColumn columnWithId:10 name:@"ts_now" type:@"timestamp_nanos" primaryKey:NO isNullable:NO];
+    c8.defaultValueJSON = @"now";
+    MongrelDBColumn *c9 = [MongrelDBColumn columnWithId:11 name:@"u" type:@"uuid" primaryKey:NO isNullable:NO];
+    c9.defaultValueJSON = @"uuid";
     NSDictionary *constraints = @{
         @"checks": @[@{@"id": @1, @"name": @"id_present",
                          @"expr": @{@"IsNotNull": @1}}],
@@ -115,7 +180,7 @@ static void test_create_table_body(void) {
     CapturingClient *client = [[CapturingClient alloc] init];
     NSError *error = nil;
     int64_t tableId = [client createTableWithName:@"orders"
-                                          columns:@[c1, c2, c3, c4, c5, c6, c7]
+                                          columns:@[c1, c2, c3, c4, c5, c6, c7, c8, c9]
                                       constraints:constraints
                                             error:&error];
     CHECK(error == nil, "createTable returned an error");
@@ -132,8 +197,35 @@ static void test_create_table_body(void) {
     CHECK([json containsString:@"\"default_value\":\"draft\""], "body missing string default");
     CHECK([json containsString:@"\"default_value\":true"], "body missing bool default");
     CHECK([json containsString:@"\"default_value\":null"], "body missing null default");
-    NSDictionary *created = [body[@"columns"] objectAtIndex:2];
-    CHECK(created[@"default_value"] == nil, "default_expr did not suppress default_value");
+    CHECK([json containsString:@"\"default_value\":\"now\""], "body missing literal now default_value");
+    CHECK([json containsString:@"\"default_value\":\"uuid\""], "body missing literal uuid default_value");
+
+    /* Inspect decoded JSON to prove each literal preserves its scalar type. */
+    NSDictionary *c3decoded = columnById(body, 5);
+    CHECK(c3decoded != nil, "decoded column 5 missing");
+    CHECK(c3decoded[@"default_expr"] != nil, "column 5 missing default_expr");
+    CHECK(c3decoded[@"default_value"] == nil, "default_expr did not suppress default_value");
+
+    NSDictionary *c4decoded = columnById(body, 6);
+    CHECK([c4decoded[@"default_value"] isEqualToNumber:@3], "column 6 default_value should be integer 3");
+
+    NSDictionary *c5decoded = columnById(body, 7);
+    CHECK([c5decoded[@"default_value"] isEqualToString:@"draft"], "column 7 default_value should be string draft");
+
+    NSDictionary *c6decoded = columnById(body, 8);
+    CHECK([c6decoded[@"default_value"] isEqual:@YES], "column 8 default_value should be bool true");
+
+    NSDictionary *c7decoded = columnById(body, 9);
+    CHECK([c7decoded[@"default_value"] isEqual:NSNull.null], "column 9 default_value should be explicit null");
+
+    NSDictionary *c8decoded = columnById(body, 10);
+    CHECK([c8decoded[@"default_value"] isEqualToString:@"now"], "column 10 default_value should be literal string now");
+    CHECK(c8decoded[@"default_expr"] == nil, "literal now must not be emitted as default_expr");
+
+    NSDictionary *c9decoded = columnById(body, 11);
+    CHECK([c9decoded[@"default_value"] isEqualToString:@"uuid"], "column 11 default_value should be literal string uuid");
+    CHECK(c9decoded[@"default_expr"] == nil, "literal uuid must not be emitted as default_expr");
+
     CHECK([json containsString:@"\"constraints\""], "body missing constraints");
     CHECK([json containsString:@"\"checks\""], "body missing constraints.checks");
     CHECK([json containsString:@"\"IsNotNull\":1"], "body missing check expression");
@@ -183,18 +275,57 @@ static void test_segment_encoding(void) {
     (void)encoded;
 }
 
-/* The history retention PUT body must use the exact frozen key. */
+/* The history retention PUT body must use the exact frozen key, method, and path. */
 static void test_history_retention_body(void) {
-    CapturingClient *client = [[CapturingClient alloc] init];
+    HistoryWireClient *client = [[HistoryWireClient alloc] init];
     NSError *error = nil;
     NSDictionary *result = [client setHistoryRetentionEpochs:42 error:&error];
-    (void)result;
     CHECK(error == nil, "setHistoryRetentionEpochs returned an error");
+    CHECK(result != nil, "setHistoryRetentionEpochs returned nil");
+    CHECK([client.lastMethod isEqualToString:@"PUT"], "setter must use PUT");
+    CHECK([client.lastPath isEqualToString:@"history/retention"], "setter must target /history/retention");
 
     NSDictionary *body = client.capturedBody;
     NSString *json = sortedJSON(body);
     CHECK([json containsString:@"\"history_retention_epochs\""], "body missing history_retention_epochs key");
     CHECK([json containsString:@"\"history_retention_epochs\":42"], "body missing history_retention_epochs value");
+}
+
+/* Setter error propagation: a non-2xx /history/retention response must reach
+ * the caller as a nil result and a populated error. */
+static void test_history_retention_setter_error_propagation(void) {
+    HistoryWireClient *client = [[HistoryWireClient alloc] init];
+    client.failNext = YES;
+    NSError *error = nil;
+    NSDictionary *result = [client setHistoryRetentionEpochs:42 error:&error];
+    CHECK(error != nil, "setter error must be propagated");
+    CHECK(result == nil, "setter must return nil on error");
+}
+
+/* GET /history/retention must parse both response keys and use the right
+ * method/path. */
+static void test_history_retention_get_response_keys(void) {
+    HistoryWireClient *client = [[HistoryWireClient alloc] init];
+    NSError *error = nil;
+    uint64_t epochs = [client historyRetentionEpochs:&error];
+    CHECK(error == nil, "historyRetentionEpochs returned an error");
+    CHECK([client.lastMethod isEqualToString:@"GET"], "getter must use GET");
+    CHECK([client.lastPath isEqualToString:@"history/retention"], "getter must target /history/retention");
+    CHECK(epochs == 7, "historyRetentionEpochs did not parse response");
+
+    uint64_t earliest = [client earliestRetainedEpoch:&error];
+    CHECK(error == nil, "earliestRetainedEpoch returned an error");
+    CHECK(earliest == 3, "earliestRetainedEpoch did not parse response");
+}
+
+/* Non-2xx responses from /history/retention must propagate to the caller. */
+static void test_history_retention_error_propagation(void) {
+    HistoryWireClient *client = [[HistoryWireClient alloc] init];
+    client.failNext = YES;
+    NSError *error = nil;
+    uint64_t epochs = [client historyRetentionEpochs:&error];
+    CHECK(error != nil, "error must be propagated");
+    CHECK(epochs == 0, "getter must return 0 on error");
 }
 
 /* Error category mapping must follow the HTTP-status contract. */
@@ -226,6 +357,9 @@ int main(int argc, const char *argv[]) {
         RUN(test_query_body);
         RUN(test_segment_encoding);
         RUN(test_history_retention_body);
+        RUN(test_history_retention_setter_error_propagation);
+        RUN(test_history_retention_get_response_keys);
+        RUN(test_history_retention_error_propagation);
         RUN(test_error_mapping);
         RUN(test_crlf_rejection);
         printf("\n%d passed, %d failed\n", g_pass, g_fail);
