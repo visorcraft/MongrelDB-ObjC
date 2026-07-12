@@ -665,10 +665,18 @@ willPerformHTTPRedirection:(NSHTTPURLResponse *)response
     }
     NSArray *flat = (NSArray *)cells;
     NSMutableDictionary *out = [NSMutableDictionary dictionary];
-    /* Preserve row_id so callers that need the engine-assigned id can read it. */
+    /* Preserve row_id so callers that need the engine-assigned id can read it.
+     * The daemon serializes row_id as a JSON string (e.g. "42"); coerce it to
+     * NSNumber here so callers can use -unsignedLongLongValue / -intValue as
+     * documented in the public header without tripping an unrecognized-selector
+     * exception on NSString. */
     id rowId = [row objectForKey:@"row_id"];
     if (rowId) {
-        out[@"row_id"] = rowId;
+        if ([rowId isKindOfClass:[NSString class]]) {
+            out[@"row_id"] = @([(NSString *)rowId longLongValue]);
+        } else {
+            out[@"row_id"] = rowId;
+        }
     }
     /* Flat array: even indices are column ids (NSNumber), odd indices values. */
     NSUInteger n = flat.count;
