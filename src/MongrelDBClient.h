@@ -243,6 +243,14 @@ NS_DESIGNATED_INITIALIZER;
                                        truncated:(nullable BOOL *)truncated
                                           error:(NSError *_Nullable *_Nullable)error;
 
+- (nullable NSArray<NSDictionary *> *)queryTable:(NSString *)table
+                                      conditions:(nullable NSArray<MongrelDBCondition *> *)conditions
+                                      projection:(nullable NSArray<NSNumber *> *)projection
+                                           limit:(int64_t)limit
+                                          offset:(int64_t)offset
+                                       truncated:(nullable BOOL *)truncated
+                                           error:(NSError *_Nullable *_Nullable)error;
+
 #pragma mark SQL & schema
 
 /* POST /sql {"sql":...,"format":"json"}. Returns the decoded JSON body (an

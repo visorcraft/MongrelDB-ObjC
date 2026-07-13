@@ -609,6 +609,17 @@ willPerformHTTPRedirection:(NSHTTPURLResponse *)response
                                            limit:(int64_t)limit
                                        truncated:(nullable BOOL *)truncated
                                           error:(NSError *_Nullable *_Nullable)error {
+    return [self queryTable:table conditions:conditions projection:projection
+                      limit:limit offset:0 truncated:truncated error:error];
+}
+
+- (nullable NSArray<NSDictionary *> *)queryTable:(NSString *)table
+                                      conditions:(nullable NSArray<MongrelDBCondition *> *)conditions
+                                      projection:(nullable NSArray<NSNumber *> *)projection
+                                           limit:(int64_t)limit
+                                          offset:(int64_t)offset
+                                       truncated:(nullable BOOL *)truncated
+                                           error:(NSError *_Nullable *_Nullable)error {
     NSMutableDictionary *body = [NSMutableDictionary dictionary];
     body[@"table"] = table ?: @"";
     if (conditions.count > 0) {
@@ -623,6 +634,9 @@ willPerformHTTPRedirection:(NSHTTPURLResponse *)response
     }
     if (limit > 0) {
         body[@"limit"] = @(limit);
+    }
+    if (offset != 0) {
+        body[@"offset"] = @(offset);
     }
 
     id r = [self requestMethod:@"POST" path:@"kit/query" body:body error:error];

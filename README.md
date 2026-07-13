@@ -284,6 +284,7 @@ if (e) {
 | `deleteFromTable:primaryKeyValue:error:` | Delete by primary key |
 | `transactionWithOps:idempotencyKey:error:` | Commit a batch atomically |
 | `queryTable:conditions:projection:limit:truncated:error:` | Run a native query |
+| `queryTable:conditions:projection:limit:offset:truncated:error:` | Run a paged native query |
 | `sql:error:` | Execute SQL |
 | `schema:error:` | Full schema catalog |
 | `schemaForTable:error:` | Single-table descriptor |

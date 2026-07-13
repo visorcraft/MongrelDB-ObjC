@@ -255,6 +255,7 @@ static void test_query_body(void) {
         ],
         @"projection": @[@(1), @(2)],
         @"limit": @(100),
+        @"offset": @(12000),
     };
     NSString *json = sortedJSON(body);
     CHECK([json containsString:@"\"table\":\"orders\""], "query body missing table");
@@ -262,6 +263,7 @@ static void test_query_body(void) {
     CHECK([json containsString:@"\"column_id\":3"], "query body missing column_id");
     CHECK([json containsString:@"\"projection\":"], "query body missing projection");
     CHECK([json containsString:@"\"limit\":100"], "query body missing limit");
+    CHECK([json containsString:@"\"offset\":12000"], "query body missing offset");
 }
 
 /* Table names with special characters must be percent-encoded in path segments. */
