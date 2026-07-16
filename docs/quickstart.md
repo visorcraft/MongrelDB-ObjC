@@ -36,7 +36,7 @@ Fetch a prebuilt server binary from the
 mkdir -p bin
 # For Apple Silicon use mongreldb-server-darwin-arm64; for Intel use mongreldb-server-darwin-x64.
 curl -fsSL -o bin/mongreldb-server \
-  https://github.com/visorcraft/MongrelDB/releases/download/v0.55.0/mongreldb-server-darwin-arm64
+  https://github.com/visorcraft/MongrelDB/releases/download/v0.57.0/mongreldb-server-darwin-arm64
 chmod +x bin/mongreldb-server
 ```
 
