@@ -471,10 +471,20 @@ willPerformHTTPRedirection:(NSHTTPURLResponse *)response
 
 /* ── Cell serialization helpers ────────────────────────────────────────── */
 
-/* Build the flat cells array the server expects: [col_id, value, ...]. */
+/* Build the flat cells array the server expects: [col_id, value, ...] in
+ * ascending column-id order. Stable ordering is required for idempotency keys:
+ * the server hashes the request payload, and unordered pair order would make
+ * two commits of the same cells look like a reuse mismatch. */
 - (NSArray *)flattenCells:(NSArray<MongrelDBInputCell *> *)cells {
-    NSMutableArray *flat = [NSMutableArray arrayWithCapacity:cells.count * 2];
-    for (MongrelDBInputCell *c in cells) {
+    NSArray<MongrelDBInputCell *> *sorted =
+        [cells sortedArrayUsingComparator:^NSComparisonResult(MongrelDBInputCell *a,
+                                                              MongrelDBInputCell *b) {
+            if (a.columnId < b.columnId) return NSOrderedAscending;
+            if (a.columnId > b.columnId) return NSOrderedDescending;
+            return NSOrderedSame;
+        }];
+    NSMutableArray *flat = [NSMutableArray arrayWithCapacity:sorted.count * 2];
+    for (MongrelDBInputCell *c in sorted) {
         [flat addObject:@(c.columnId)];
         [flat addObject:c.value ?: NSNull.null];
     }
