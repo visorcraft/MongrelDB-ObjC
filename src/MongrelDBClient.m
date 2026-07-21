@@ -415,12 +415,20 @@ willPerformHTTPRedirection:(NSHTTPURLResponse *)response
 - (int64_t)createTableWithName:(NSString *)name
                        columns:(NSArray<MongrelDBColumn *> *)columns
                          error:(NSError *_Nullable *_Nullable)error {
-    return [self createTableWithName:name columns:columns constraints:nil error:error];
+    return [self createTableWithName:name columns:columns constraints:nil indexes:nil error:error];
 }
 
 - (int64_t)createTableWithName:(NSString *)name
                        columns:(NSArray<MongrelDBColumn *> *)columns
                    constraints:(nullable NSDictionary<NSString *, id> *)constraints
+                         error:(NSError *_Nullable *_Nullable)error {
+    return [self createTableWithName:name columns:columns constraints:constraints indexes:nil error:error];
+}
+
+- (int64_t)createTableWithName:(NSString *)name
+                       columns:(NSArray<MongrelDBColumn *> *)columns
+                   constraints:(nullable NSDictionary<NSString *, id> *)constraints
+                       indexes:(nullable NSArray<NSDictionary<NSString *, id> *> *)indexes
                          error:(NSError *_Nullable *_Nullable)error {
     NSMutableArray<NSDictionary *> *cols = [NSMutableArray arrayWithCapacity:columns.count];
     for (MongrelDBColumn *c in columns) {
@@ -434,10 +442,12 @@ willPerformHTTPRedirection:(NSHTTPURLResponse *)response
         if (c.defaultExpression) { d[@"default_expr"] = c.defaultExpression; }
         else if (c.defaultValueJSON) { d[@"default_value"] = c.defaultValueJSON; }
         else if (c.defaultValue) { d[@"default_value"] = c.defaultValue; }
+        if (c.embeddingSource) { d[@"embedding_source"] = c.embeddingSource; }
         [cols addObject:d];
     }
     NSMutableDictionary *body = [@{@"name": name ?: @"", @"columns": cols} mutableCopy];
     if (constraints) { body[@"constraints"] = constraints; }
+    if (indexes) { body[@"indexes"] = indexes; }
     id r = [self requestMethod:@"POST" path:@"kit/create_table" body:body error:error];
     if ([r isKindOfClass:[NSDictionary class]]) {
         NSNumber *tid = [(NSDictionary *)r objectForKey:@"table_id"];
@@ -573,6 +583,7 @@ willPerformHTTPRedirection:(NSHTTPURLResponse *)response
 
 /* Serialize one condition into its wire shape. */
 - (NSDictionary *)serializeCondition:(MongrelDBCondition *)cond {
+    if (cond.condition) { return cond.condition; }
     switch (cond.kind) {
         case MongrelDBConditionPK:
             return @{@"pk": @{@"value": cond.value ?: NSNull.null}};

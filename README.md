@@ -165,6 +165,10 @@ if (trunc) {
 }
 ```
 
+Set `MongrelDBCondition.condition` to a complete externally tagged condition
+dictionary for ANN, sparse, MinHash, bitmap-in, FM-index-all, or any future
+server condition.
+
 ## Schema constraints
 
 Three optional fields on `MongrelDBColumn` let you set defaults and constrain
@@ -276,6 +280,7 @@ if (e) {
 | `tableNames:` | List table names |
 | `createTableWithName:columns:error:` | Create a table |
 | `createTableWithName:columns:constraints:error:` | Create a table with check constraints |
+| `createTableWithName:columns:constraints:indexes:error:` | Create a table with all six index kinds and options |
 | `dropTableWithName:error:` | Drop a table |
 | `countOfTable:error:` | Row count |
 | `putIntoTable:cells:idempotencyKey:error:` | Insert a row |

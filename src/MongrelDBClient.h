@@ -74,6 +74,8 @@ typedef id MongrelDBValue;
 @property (nonatomic, copy, nullable) MongrelDBValue defaultValueJSON;
 /* Optional dynamic default: "now" or "uuid". Has the highest precedence. */
 @property (nonatomic, copy, nullable) NSString *defaultExpression;
+/* Portable EmbeddingSource object. nil means application-supplied vectors. */
+@property (nonatomic, copy, nullable) NSDictionary<NSString *, id> *embeddingSource;
 + (instancetype)columnWithId:(uint16_t)columnId
                         name:(nullable NSString *)name
                         type:(nullable NSString *)type
@@ -108,6 +110,8 @@ typedef NS_ENUM(NSInteger, MongrelDBConditionKind) {
 @property (nonatomic, assign) BOOL hiSet;
 /* PK match / bitmap_eq value / fm_contains pattern (must be NSString). */
 @property (nonatomic, strong, nullable) MongrelDBValue value;
+/* Complete externally-tagged JsonCondition object. When set, typed fields are ignored. */
+@property (nonatomic, copy, nullable) NSDictionary<NSString *, id> *condition;
 @end
 
 /* The main client. Construct with a connect* class method and release normally. */
@@ -180,6 +184,13 @@ NS_DESIGNATED_INITIALIZER;
 - (int64_t)createTableWithName:(NSString *)name
                        columns:(NSArray<MongrelDBColumn *> *)columns
                    constraints:(nullable NSDictionary<NSString *, id> *)constraints
+                         error:(NSError *_Nullable *_Nullable)error;
+
+/* Full schema creation with all six secondary-index kinds and options. */
+- (int64_t)createTableWithName:(NSString *)name
+                       columns:(NSArray<MongrelDBColumn *> *)columns
+                   constraints:(nullable NSDictionary<NSString *, id> *)constraints
+                       indexes:(nullable NSArray<NSDictionary<NSString *, id> *> *)indexes
                          error:(NSError *_Nullable *_Nullable)error;
 
 /* DELETE /tables/{name}. */
