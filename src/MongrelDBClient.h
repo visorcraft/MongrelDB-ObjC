@@ -262,6 +262,23 @@ NS_DESIGNATED_INITIALIZER;
                                        truncated:(nullable BOOL *)truncated
                                            error:(NSError *_Nullable *_Nullable)error;
 
+#pragma mark SQL control / retrieve_text (0.64+)
+
+/* POST /kit/retrieve_text — text → embed → ANN retrieve. */
+- (nullable NSDictionary *)retrieveTextForTable:(NSString *)table
+                               embeddingColumn:(int64_t)embeddingColumn
+                                          text:(NSString *)text
+                                             k:(int64_t)k
+                                         error:(NSError *_Nullable *_Nullable)error;
+
+/* GET /queries/{query_id} durable recovery status. */
+- (nullable NSDictionary *)queryStatus:(NSString *)queryId
+                                 error:(NSError *_Nullable *_Nullable)error;
+
+/* POST /queries/{query_id}/cancel. */
+- (nullable NSDictionary *)cancelQuery:(NSString *)queryId
+                                 error:(NSError *_Nullable *_Nullable)error;
+
 #pragma mark SQL & schema
 
 /* POST /sql {"sql":...,"format":"json"}. Returns the decoded JSON body (an

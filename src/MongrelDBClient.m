@@ -727,6 +727,56 @@ willPerformHTTPRedirection:(NSHTTPURLResponse *)response
     return out;
 }
 
+/* ── SQL control / retrieve_text (0.64+) ───────────────────────────────── */
+
+- (nullable NSDictionary *)retrieveTextForTable:(NSString *)table
+                               embeddingColumn:(int64_t)embeddingColumn
+                                          text:(NSString *)text
+                                             k:(int64_t)k
+                                         error:(NSError *_Nullable *_Nullable)error {
+    if (table.length == 0) {
+        if (error) *error = [self makeError:MongrelDBErrorQuery message:@"table is required"];
+        return nil;
+    }
+    if (text.length == 0) {
+        if (error) *error = [self makeError:MongrelDBErrorQuery message:@"text is required"];
+        return nil;
+    }
+    NSMutableDictionary *body = [@{
+        @"table": table,
+        @"embedding_column": @(embeddingColumn),
+        @"text": text
+    } mutableCopy];
+    if (k > 0) body[@"k"] = @(k);
+    id r = [self requestMethod:@"POST" path:@"kit/retrieve_text" body:body error:error];
+    return [r isKindOfClass:[NSDictionary class]] ? (NSDictionary *)r : @{@"hits": @[], @"provenance": @{}};
+}
+
+- (nullable NSDictionary *)queryStatus:(NSString *)queryId
+                                 error:(NSError *_Nullable *_Nullable)error {
+    if (queryId.length == 0) {
+        if (error) *error = [self makeError:MongrelDBErrorQuery message:@"query_id is required"];
+        return nil;
+    }
+    NSString *seg = [MongrelDBClient encodeSegment:queryId];
+    id r = [self requestMethod:@"GET" path:[NSString stringWithFormat:@"queries/%@", seg] body:nil error:error];
+    return [r isKindOfClass:[NSDictionary class]] ? (NSDictionary *)r : nil;
+}
+
+- (nullable NSDictionary *)cancelQuery:(NSString *)queryId
+                                 error:(NSError *_Nullable *_Nullable)error {
+    if (queryId.length == 0) {
+        if (error) *error = [self makeError:MongrelDBErrorQuery message:@"query_id is required"];
+        return nil;
+    }
+    NSString *seg = [MongrelDBClient encodeSegment:queryId];
+    id r = [self requestMethod:@"POST"
+                          path:[NSString stringWithFormat:@"queries/%@/cancel", seg]
+                          body:@{}
+                         error:error];
+    return [r isKindOfClass:[NSDictionary class]] ? (NSDictionary *)r : @{};
+}
+
 /* ── SQL & schema ──────────────────────────────────────────────────────── */
 
 - (nullable id)sql:(NSString *)sql error:(NSError *_Nullable *_Nullable)error {
