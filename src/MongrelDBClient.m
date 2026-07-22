@@ -777,6 +777,50 @@ willPerformHTTPRedirection:(NSHTTPURLResponse *)response
     return [r isKindOfClass:[NSDictionary class]] ? (NSDictionary *)r : @{};
 }
 
++ (nullable NSDictionary *)parseCommitHlc:(id)raw {
+    if (![raw isKindOfClass:[NSDictionary class]]) return nil;
+    NSDictionary *d = (NSDictionary *)raw;
+    id phys = d[@"physical_micros"];
+    if (phys == nil || phys == [NSNull null]) return nil;
+    return @{
+        @"physical_micros": phys,
+        @"logical": d[@"logical"] ?: @0,
+        @"node_tiebreaker": d[@"node_tiebreaker"] ?: @0,
+    };
+}
+
++ (nullable NSDictionary *)commitHlcFromQueryStatus:(NSDictionary *)status {
+    if (![status isKindOfClass:[NSDictionary class]]) return nil;
+    NSDictionary *durable = status[@"durable"];
+    if ([durable isKindOfClass:[NSDictionary class]]) {
+        NSDictionary *hlc = [self parseCommitHlc:durable[@"last_commit_hlc"]];
+        if (hlc) return hlc;
+    }
+    NSDictionary *outcome = status[@"outcome"];
+    if ([outcome isKindOfClass:[NSDictionary class]]) {
+        NSDictionary *hlc = [self parseCommitHlc:outcome[@"last_commit_hlc"]];
+        if (hlc) return hlc;
+    }
+    return [self parseCommitHlc:status[@"last_commit_hlc"]];
+}
+
++ (NSString *)serializationStateFromQueryStatus:(NSDictionary *)status {
+    if (![status isKindOfClass:[NSDictionary class]]) return @"";
+    for (NSString *key in @[ @"durable", @"outcome" ]) {
+        NSDictionary *nest = status[key];
+        if (![nest isKindOfClass:[NSDictionary class]]) continue;
+        id ss = nest[@"serialization_state"];
+        if ([ss isKindOfClass:[NSString class]] && [(NSString *)ss length] > 0) {
+            return (NSString *)ss;
+        }
+        id s = nest[@"serialization"];
+        if ([s isKindOfClass:[NSString class]] && [(NSString *)s length] > 0) {
+            return (NSString *)s;
+        }
+    }
+    return @"";
+}
+
 /* ── SQL & schema ──────────────────────────────────────────────────────── */
 
 - (nullable id)sql:(NSString *)sql error:(NSError *_Nullable *_Nullable)error {

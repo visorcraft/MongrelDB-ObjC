@@ -279,6 +279,12 @@ NS_DESIGNATED_INITIALIZER;
 - (nullable NSDictionary *)cancelQuery:(NSString *)queryId
                                  error:(NSError *_Nullable *_Nullable)error;
 
+/* Structural last_commit_hlc from a status dict (durable → outcome → top). */
++ (nullable NSDictionary *)commitHlcFromQueryStatus:(NSDictionary *)status;
+
+/* serialization_state / serialization from nested durable/outcome. */
++ (NSString *)serializationStateFromQueryStatus:(NSDictionary *)status;
+
 #pragma mark SQL & schema
 
 /* POST /sql {"sql":...,"format":"json"}. Returns the decoded JSON body (an
