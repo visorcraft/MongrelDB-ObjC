@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 project(mongreldb_objc
-    VERSION 0.64.19
+    VERSION 0.65.0
     DESCRIPTION "Objective-C (Apple Foundation) HTTP client for MongrelDB"
     LANGUAGES OBJC
 )
